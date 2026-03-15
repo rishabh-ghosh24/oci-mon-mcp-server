@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oci-mon-mcp-server"
+version = "0.1.0"
+description = "MCP server for OCI Monitoring natural-language metric exploration"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Rishabh Ghosh, Product Manager - OCI Observability and Manageability" }]
+dependencies = [
+  "mcp>=1.0.0",
+  "oci>=2.150.0",
+  "matplotlib>=3.9.0",
+]
+
+[project.optional-dependencies]
+analytics = [
+  "numpy>=1.26.0",
+  "pandas>=2.2.0",
+  "scikit-learn>=1.5.0",
+  "statsmodels>=0.14.0",
+]
+dev = [
+  "pytest>=8.2.0",
+  "pytest-cov>=5.0.0",
+  "ruff>=0.5.0",
+  "mypy>=1.10.0",
+]
+
+[project.scripts]
+oci-mon-mcp-server = "oci_mon_mcp.server:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

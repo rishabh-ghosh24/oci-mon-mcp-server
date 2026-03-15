@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE/editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local environment and secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+oci_api_key*.pem
+
+# Logs and runtime artifacts
+*.log
+logs/
+tmp/
+.tmp/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Codex/local assistant artifacts
+.codex/
+.codex-cache/
+.codex-tmp/
+
+# Claude/Anthropic local artifacts (Desktop/Code)
+.claude/
+.claude-code/
+.anthropic/
+CLAUDE.local.md
+claude*.log
