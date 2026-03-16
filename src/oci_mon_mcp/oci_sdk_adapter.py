@@ -48,6 +48,7 @@ class OciSdkExecutionAdapter:
             session.compute_client,
             request.compartment_id,
             include_subcompartments=request.include_subcompartments,
+            compartment_lookup=request.compartment_lookup,
         )
 
         end_time = datetime.now(UTC)
@@ -175,6 +176,7 @@ class OciSdkExecutionAdapter:
         compartment_id: str,
         *,
         include_subcompartments: bool,
+        compartment_lookup: dict[str, str] | None = None,
     ) -> dict[str, dict[str, str]]:
         list_kwargs: dict[str, Any] = {"compartment_id": compartment_id}
         if include_subcompartments:
@@ -182,27 +184,61 @@ class OciSdkExecutionAdapter:
             list_kwargs["access_level"] = "ACCESSIBLE"
         try:
             response = oci.pagination.list_call_get_all_results(compute_client.list_instances, **list_kwargs)
+            instances = response.data
         except Exception as exc:
             # Some SDK/client variants do not accept subtree kwargs on list_instances.
             message = str(exc)
             if include_subcompartments and (
                 "unknown kwargs" in message or "unexpected keyword argument" in message
             ):
-                response = oci.pagination.list_call_get_all_results(
-                    compute_client.list_instances,
-                    compartment_id=compartment_id,
+                instances = self._list_instances_with_compartment_fallback(
+                    oci=oci,
+                    compute_client=compute_client,
+                    root_compartment_id=compartment_id,
+                    compartment_lookup=compartment_lookup or {},
                 )
             else:
                 raise
-        return {
-            instance.id: {
+        instance_index: dict[str, dict[str, str]] = {}
+        for instance in instances:
+            metadata = {
                 "id": instance.id,
                 "display_name": instance.display_name,
                 "lifecycle_state": instance.lifecycle_state,
                 "compartment_id": getattr(instance, "compartment_id", None),
             }
-            for instance in response.data
-        }
+            instance_index[instance.id] = metadata
+            display_name = getattr(instance, "display_name", None)
+            if display_name:
+                # Monitoring dimensions can fall back to display name for resource keys.
+                instance_index.setdefault(display_name, metadata)
+        return instance_index
+
+    def _list_instances_with_compartment_fallback(
+        self,
+        *,
+        oci: Any,
+        compute_client: Any,
+        root_compartment_id: str,
+        compartment_lookup: dict[str, str],
+    ) -> list[Any]:
+        compartment_ids: list[str] = [root_compartment_id]
+        for cid in compartment_lookup:
+            if cid not in compartment_ids:
+                compartment_ids.append(cid)
+
+        collected: dict[str, Any] = {}
+        for compartment_id in compartment_ids:
+            try:
+                response = oci.pagination.list_call_get_all_results(
+                    compute_client.list_instances,
+                    compartment_id=compartment_id,
+                )
+            except Exception:
+                continue
+            for instance in response.data:
+                collected[instance.id] = instance
+        return list(collected.values())
 
     def _normalize_results(
         self,
@@ -248,7 +284,7 @@ class OciSdkExecutionAdapter:
             rows.sort(key=lambda row: row["max_value"], reverse=True)
 
         chart_candidates.sort(key=lambda item: item[0], reverse=True)
-        chart_series = [series for _, series in chart_candidates[:5]]
+        chart_series = [series for _, series in chart_candidates]
         return rows, chart_series
 
     def _merge_metric_points(

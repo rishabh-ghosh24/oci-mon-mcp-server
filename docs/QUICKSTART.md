@@ -221,6 +221,14 @@ The prototype exposes these tools:
 - `use_instance_principals`
 - `list_saved_templates`
 
+## 8.1 Result Shape Defaults
+- Queries return a short summary, then a table, then chart/artifacts.
+- By default, the table shows the top 10 rows.
+- By default, the chart shows the top 10 series.
+- If more than 10 rows are returned, a CSV artifact is generated for the full export.
+- For tenancy-wide queries, rows include `compartment` and `lifecycle_state` from Compute metadata
+  when available.
+
 ## 9. First Test Sequence
 
 ### Option A: manual context setup

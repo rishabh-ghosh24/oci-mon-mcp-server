@@ -78,6 +78,9 @@ NEW_QUERY_HINTS = (
     "now do the same",
 )
 
+DEFAULT_TABLE_LIMIT = 10
+DEFAULT_CHART_LIMIT = 10
+
 
 class MonitoringAssistantService:
     """Main application service for the prototype."""
@@ -1001,7 +1004,7 @@ class MonitoringAssistantService:
                 chart_artifact = None
             if chart_artifact is not None:
                 generated_artifacts.append(chart_artifact)
-        if len(result.rows) > 20:
+        if len(result.rows) > DEFAULT_TABLE_LIMIT:
             csv_artifact = self.artifact_manager.generate_csv(
                 rows=result.rows,
                 title=f"{parsed.metric_label} results export",
@@ -1014,7 +1017,7 @@ class MonitoringAssistantService:
             interval=parsed.interval,
             namespace=parsed.namespace,
             metric=parsed.metric_label,
-            truncated=len(result.rows) > 20,
+            truncated=len(result.rows) > DEFAULT_TABLE_LIMIT,
             timing={"started_at": started_at, "finished_at": utc_now_iso()},
         )
 
@@ -1060,7 +1063,7 @@ class MonitoringAssistantService:
     def _build_table(self, parsed: ParsedQuery, result: ExecutionResult) -> TableBlock | None:
         if not result.rows:
             return None
-        visible_rows = result.rows[:20]
+        visible_rows = result.rows[:DEFAULT_TABLE_LIMIT]
         row_recommendation = self._default_recommendations(parsed.metric_key, result.rows)[0]
         for row in visible_rows:
             if not row.get("recommendation"):
@@ -1084,7 +1087,7 @@ class MonitoringAssistantService:
             type="line",
             x_axis="time",
             y_axis=METRIC_CONFIGS[parsed.metric_key]["y_axis"],
-            series=result.chart_series[:5],
+            series=result.chart_series[:DEFAULT_CHART_LIMIT],
             threshold_line=threshold_line,
         )
 
