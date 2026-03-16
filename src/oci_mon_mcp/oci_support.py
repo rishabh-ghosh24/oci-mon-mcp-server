@@ -142,7 +142,8 @@ class OciContextResolver:
             {
                 "name": tenancy.name,
                 "id": tenancy.id,
-                "lifecycle_state": tenancy.lifecycle_state,
+                # Some OCI SDK tenancy models do not include lifecycle_state.
+                "lifecycle_state": getattr(tenancy, "lifecycle_state", "ACTIVE"),
                 "is_root": "true",
             }
         ]
