@@ -106,6 +106,8 @@ Equivalent:
 python -m oci_mon_mcp.server
 ```
 
+Client connection setup is documented in `docs/CLIENT_SETUP.md`.
+
 ## 8. MCP Tools Exposed
 The prototype exposes these tools:
 - `monitoring_assistant`

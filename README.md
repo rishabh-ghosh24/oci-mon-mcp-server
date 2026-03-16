@@ -5,6 +5,7 @@ MCP server that connects AI assistants to OCI Monitoring service. Query, analyze
 ```text
 .
 ├── docs/
+│   ├── CLIENT_SETUP.md
 │   ├── TECHNICAL_REQUIREMENTS.md
 │   ├── LEARNING_TEMPLATE_STRATEGY.md
 │   ├── PROTOTYPE_PRD.md
@@ -44,3 +45,4 @@ MCP server that connects AI assistants to OCI Monitoring service. Query, analyze
 
 ## Run
 See `docs/QUICKSTART.md` for the VM runbook and first test sequence.
+See `docs/CLIENT_SETUP.md` for Codex, Claude, and ChatGPT client setup.
