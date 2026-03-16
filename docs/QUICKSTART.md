@@ -89,6 +89,8 @@ export OCI_MON_MCP_ARTIFACT_PORT=8765
 
 # Avoid matplotlib cache warnings on the VM.
 export MPLCONFIGDIR=/tmp/matplotlib
+# Optional: suppress expected noisy /mcp probe access logs (404/400).
+export OCI_MON_MCP_SUPPRESS_EXPECTED_MCP_PROBE_LOGS=1
 ```
 
 If you want the main MCP endpoint on a different path:

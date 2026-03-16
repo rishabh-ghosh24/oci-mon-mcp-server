@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import logging
 import os
 import sys
 from typing import Any
@@ -16,6 +17,29 @@ except ImportError:  # pragma: no cover - exercised by import fallback tests ins
 
 
 SERVICE = MonitoringAssistantService()
+
+
+class _ExpectedMcpAccessFilter(logging.Filter):
+    """Filter expected noisy MCP probe logs that are not actionable errors."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if " /mcp HTTP/1.1" not in message:
+            return True
+        expected_patterns = (
+            '"GET /mcp HTTP/1.1" 404',
+            '"DELETE /mcp HTTP/1.1" 404',
+            '"GET /mcp HTTP/1.1" 400',
+        )
+        return not any(pattern in message for pattern in expected_patterns)
+
+
+def _configure_access_log_filter() -> None:
+    """Suppress expected MCP probe noise so operator logs stay actionable."""
+    if os.getenv("OCI_MON_MCP_SUPPRESS_EXPECTED_MCP_PROBE_LOGS", "1") != "1":
+        return
+    logger = logging.getLogger("uvicorn.access")
+    logger.addFilter(_ExpectedMcpAccessFilter())
 
 
 def create_mcp_server() -> Any:
@@ -138,6 +162,7 @@ def create_mcp_server() -> Any:
 
 def main() -> None:
     """Start the MCP server if FastMCP is installed."""
+    _configure_access_log_filter()
     server = create_mcp_server()
     if server is None:
         print(
