@@ -143,18 +143,62 @@ Use this after pulling changes:
 ```bash
 cd /home/opc/oci-mon-mcp-server
 source .venv/bin/activate
+git pull
 pip install -e .
 pkill -f "oci_mon_mcp.server|oci-mon-mcp-server" || true
 nohup oci-mon-mcp-server >/tmp/oci-mon-mcp.log 2>&1 &
 tail -n 40 /tmp/oci-mon-mcp.log
 ```
 
-### Optional: quick restart with systemd
-If you manage the service with systemd:
+### Optional: run with systemd (recommended for persistence)
+If you do not already have a service, create one:
 
 ```bash
+sudo tee /etc/systemd/system/oci-mon-mcp-server.service >/dev/null <<'EOF'
+[Unit]
+Description=OCI Mon MCP Server
+After=network.target
+
+[Service]
+Type=simple
+User=opc
+WorkingDirectory=/home/opc/oci-mon-mcp-server
+EnvironmentFile=/etc/oci-mon-mcp-server.env
+# Use system Python for ExecStart and point PYTHONPATH to the venv + source tree.
+# This avoids 203/EXEC Permission denied on some Oracle Linux + SELinux setups.
+Environment="PYTHONPATH=/home/opc/oci-mon-mcp-server/src:/home/opc/oci-mon-mcp-server/.venv/lib64/python3.11/site-packages"
+ExecStart=/usr/bin/python3.11 -m oci_mon_mcp.server
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+Enable/start it:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now oci-mon-mcp-server
+sudo systemctl status oci-mon-mcp-server --no-pager -l
+```
+
+For subsequent code updates with systemd:
+
+```bash
+cd /home/opc/oci-mon-mcp-server
+source .venv/bin/activate
+git pull
+pip install -e .
 sudo systemctl restart oci-mon-mcp-server
 sudo systemctl status oci-mon-mcp-server --no-pager -l
+```
+
+If startup fails, inspect logs:
+
+```bash
+sudo journalctl -u oci-mon-mcp-server -n 80 --no-pager
 ```
 
 Client connection setup is documented in `docs/CLIENT_SETUP.md`.
