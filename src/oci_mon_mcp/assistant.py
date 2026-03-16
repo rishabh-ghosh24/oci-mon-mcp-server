@@ -874,15 +874,29 @@ class MonitoringAssistantService:
         parsed: ParsedQuery,
     ) -> AssistantResponse:
         started_at = utc_now_iso()
+        request: QueryExecutionRequest | None = None
+        scope = {
+            "scope_type": "default_compartment",
+            "scope_label": f"default compartment {profile.get('default_compartment_name', '')}".strip(),
+            "compartment_name": profile.get("default_compartment_name"),
+            "compartment_id": profile.get("default_compartment_id"),
+            "include_subcompartments": True,
+        }
         try:
             profile = self._ensure_resolved_context(profile_id, profile)
-            parsed = self._ensure_resolved_instance(profile, parsed)
+            scope = self._resolve_query_scope(profile_id=profile_id, profile=profile, parsed=parsed)
+            parsed = self._ensure_resolved_instance(
+                profile,
+                parsed,
+                compartment_id=scope["compartment_id"],
+            )
             request = QueryExecutionRequest(
                 parsed_query=parsed,
                 profile_id=profile_id,
                 region=profile["region"],
-                compartment_name=profile["default_compartment_name"],
-                compartment_id=profile.get("default_compartment_id"),
+                compartment_name=scope["compartment_name"],
+                compartment_id=scope["compartment_id"],
+                include_subcompartments=scope["include_subcompartments"],
                 auth_mode=profile.get("auth_mode", "instance_principal"),
                 config_fallback=profile.get("config_fallback", {}),
             )
@@ -906,7 +920,10 @@ class MonitoringAssistantService:
             self.repository.set_pending_clarification(profile_id, pending)
             return AssistantResponse(
                 status="needs_clarification",
-                interpretation=self._interpretation_line(profile, parsed),
+                interpretation=self._interpretation_line(
+                    parsed,
+                    scope_label=scope["scope_label"],
+                ),
                 clarifications=[ClarificationQuestion(**pending["questions"][0])],
                 summary=str(exc),
             )
@@ -940,19 +957,25 @@ class MonitoringAssistantService:
             self.repository.set_pending_clarification(profile_id, pending)
             return AssistantResponse(
                 status="needs_clarification",
-                interpretation=self._interpretation_line(profile, parsed),
+                interpretation=self._interpretation_line(
+                    parsed,
+                    scope_label=scope["scope_label"],
+                ),
                 clarifications=[ClarificationQuestion(**pending["questions"][0])],
                 summary=str(exc),
             )
         except (DependencyMissingError, CompartmentResolutionError, RuntimeError) as exc:
             return AssistantResponse(
                 status="error",
-                interpretation=self._interpretation_line(profile, parsed),
+                interpretation=self._interpretation_line(
+                    parsed,
+                    scope_label=scope["scope_label"],
+                ),
                 summary=str(exc),
                 recommendations=self._default_recommendations(parsed.metric_key, []),
                 details=AssistantDetails(
-                    query_text=request.query_text,
-                    scope=self._scope_details(profile_id, profile),
+                    query_text=request.query_text if request is not None else None,
+                    scope=self._scope_details(profile_id, profile, scope),
                     interval=parsed.interval,
                     namespace=parsed.namespace,
                     metric=parsed.metric_label,
@@ -979,7 +1002,7 @@ class MonitoringAssistantService:
                 generated_artifacts.append(csv_artifact)
         details = AssistantDetails(
             query_text=request.query_text,
-            scope=self._scope_details(profile_id, profile),
+            scope=self._scope_details(profile_id, profile, scope),
             interval=parsed.interval,
             namespace=parsed.namespace,
             metric=parsed.metric_label,
@@ -1012,7 +1035,10 @@ class MonitoringAssistantService:
 
         return AssistantResponse(
             status="success",
-            interpretation=self._interpretation_line(profile, parsed),
+            interpretation=self._interpretation_line(
+                parsed,
+                scope_label=scope["scope_label"],
+            ),
             summary=result.summary,
             tables=[table] if table is not None else [],
             charts=[chart] if chart is not None else [],
@@ -1091,12 +1117,27 @@ class MonitoringAssistantService:
             learned_intent_key=learned_intent_key,
         )
 
-    def _scope_details(self, profile_id: str, profile: dict[str, Any]) -> dict[str, Any]:
+    def _scope_details(
+        self,
+        profile_id: str,
+        profile: dict[str, Any],
+        scope: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        resolved_scope = scope or {
+            "scope_type": "default_compartment",
+            "scope_label": f"default compartment {profile.get('default_compartment_name', '')}".strip(),
+            "compartment_name": profile.get("default_compartment_name"),
+            "compartment_id": profile.get("default_compartment_id"),
+            "include_subcompartments": True,
+        }
         return {
             "profile_id": profile_id,
             "region": profile.get("region"),
-            "compartment_name": profile.get("default_compartment_name"),
-            "compartment_id": profile.get("default_compartment_id"),
+            "scope_type": resolved_scope.get("scope_type"),
+            "scope_label": resolved_scope.get("scope_label"),
+            "compartment_name": resolved_scope.get("compartment_name"),
+            "compartment_id": resolved_scope.get("compartment_id"),
+            "include_subcompartments": resolved_scope.get("include_subcompartments", True),
             "auth_mode": profile.get("auth_mode", "instance_principal"),
         }
 
@@ -1104,13 +1145,15 @@ class MonitoringAssistantService:
         self,
         profile: dict[str, Any],
         parsed: ParsedQuery,
+        *,
+        compartment_id: str | None,
     ) -> ParsedQuery:
-        if not parsed.instance_name or parsed.instance_id or not profile.get("default_compartment_id"):
+        if not parsed.instance_name or parsed.instance_id or not compartment_id:
             return parsed
         resolved = self.context_resolver.resolve_instance_name(
             region=profile["region"],
             auth_mode=profile.get("auth_mode", "instance_principal"),
-            compartment_id=profile["default_compartment_id"],
+            compartment_id=compartment_id,
             instance_name=parsed.instance_name,
             config_fallback=profile.get("config_fallback", {}),
         )
@@ -1143,29 +1186,114 @@ class MonitoringAssistantService:
         )
         return updated
 
-    def _interpretation_line(self, profile: dict[str, Any], parsed: ParsedQuery) -> str:
+    def _resolve_query_scope(
+        self,
+        *,
+        profile_id: str,
+        profile: dict[str, Any],
+        parsed: ParsedQuery,
+    ) -> dict[str, Any]:
+        query_lower = " ".join(parsed.source_query.lower().split())
+        include_subcompartments = not any(
+            phrase in query_lower
+            for phrase in (
+                "without subcompartment",
+                "without subcompartments",
+                "exclude subcompartment",
+                "exclude subcompartments",
+                "no subcompartment",
+                "no subcompartments",
+                "subcompartment false",
+                "subcompartments false",
+                "only this compartment",
+            )
+        )
+        tenancy_requested = any(
+            phrase in query_lower
+            for phrase in (
+                "across tenancy",
+                "across the tenancy",
+                "tenancy wide",
+                "tenancy-wide",
+                "entire tenancy",
+                "all compartments",
+            )
+        )
+        if tenancy_requested:
+            tenancy_id = profile.get("tenancy_id")
+            if not tenancy_id:
+                listing = self.context_resolver.list_accessible_compartments(
+                    region=profile["region"],
+                    auth_mode=profile.get("auth_mode", "instance_principal"),
+                    config_fallback=profile.get("config_fallback", {}),
+                )
+                tenancy_id = listing["tenancy_id"]
+                profile["tenancy_id"] = tenancy_id
+                profile["available_compartments"] = listing["compartments"]
+                self.repository.update_profile(profile_id, profile)
+            return {
+                "scope_type": "tenancy",
+                "scope_label": "tenancy",
+                "compartment_name": "tenancy",
+                "compartment_id": tenancy_id,
+                "include_subcompartments": include_subcompartments,
+            }
+
+        compartment_match = re.search(
+            r"(?:in|from|within)\s+(?:the\s+)?compartment\s+([A-Za-z0-9_.\- ]+?)(?=\s+(?:for|over|during|across|with|where|whose|that)\b|[?.!,]|$)",
+            parsed.source_query,
+            re.IGNORECASE,
+        ) or re.search(
+            r"compartment\s*[:=]\s*([A-Za-z0-9_.\- ]+?)(?=\s+(?:for|over|during|across|with|where|whose|that)\b|[?.!,]|$)",
+            parsed.source_query,
+            re.IGNORECASE,
+        )
+        if compartment_match:
+            requested_name = compartment_match.group(1).strip().strip('"').strip("'")
+            resolved = self.context_resolver.resolve_compartment(
+                region=profile["region"],
+                auth_mode=profile.get("auth_mode", "instance_principal"),
+                compartment_name=requested_name,
+                compartment_id=None,
+                config_fallback=profile.get("config_fallback", {}),
+            )
+            return {
+                "scope_type": "named_compartment",
+                "scope_label": f"compartment {resolved['compartment_name']}",
+                "compartment_name": resolved["compartment_name"],
+                "compartment_id": resolved["compartment_id"],
+                "include_subcompartments": include_subcompartments,
+            }
+
+        return {
+            "scope_type": "default_compartment",
+            "scope_label": f"default compartment {profile['default_compartment_name']}",
+            "compartment_name": profile["default_compartment_name"],
+            "compartment_id": profile.get("default_compartment_id"),
+            "include_subcompartments": include_subcompartments,
+        }
+
+    def _interpretation_line(self, parsed: ParsedQuery, *, scope_label: str) -> str:
         metric_phrase = parsed.metric_label.lower()
         if parsed.intent == "threshold" and parsed.threshold is not None:
             return (
-                f"Interpreted as: find compute instances in default compartment "
-                f"{profile['default_compartment_name']} whose max {metric_phrase} exceeded "
+                f"Interpreted as: find compute instances in {scope_label} whose max {metric_phrase} exceeded "
                 f"{parsed.threshold:.0f}% in the last {parsed.time_range}."
             )
         if parsed.intent == "named_trend" and parsed.instance_name:
             return (
                 f"Interpreted as: show the {metric_phrase} trend for compute instance "
-                f"{parsed.instance_name} in default compartment {profile['default_compartment_name']} "
+                f"{parsed.instance_name} in {scope_label} "
                 f"over the last {parsed.time_range}."
             )
         if parsed.intent == "worst_performing":
             return (
                 f"Interpreted as: show the worst-performing compute instances by max {metric_phrase} "
-                f"in the last {parsed.time_range} in default compartment "
-                f"{profile['default_compartment_name']}."
+                f"in the last {parsed.time_range} in {scope_label}."
             )
         return (
             f"Interpreted as: show compute instances ranked by max {metric_phrase} in the last "
-            f"{parsed.time_range} in default compartment {profile['default_compartment_name']}."
+            f"{parsed.time_range} in {scope_label}."
         )
 
     def _default_recommendations(

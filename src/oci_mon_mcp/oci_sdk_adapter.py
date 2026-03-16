@@ -43,7 +43,12 @@ class OciSdkExecutionAdapter:
         assert session.monitoring_client is not None
         assert session.compute_client is not None
         oci = session.oci
-        instance_index = self._list_instances(oci, session.compute_client, request.compartment_id)
+        instance_index = self._list_instances(
+            oci,
+            session.compute_client,
+            request.compartment_id,
+            include_subcompartments=request.include_subcompartments,
+        )
 
         end_time = datetime.now(UTC)
         start_time = end_time - TIME_RANGE_TO_DELTA[request.parsed_query.time_range]
@@ -70,10 +75,13 @@ class OciSdkExecutionAdapter:
                 end_time=end_time,
                 resolution=request.parsed_query.interval,
             )
-            response = session.monitoring_client.summarize_metrics_data(
-                compartment_id=request.compartment_id,
-                summarize_metrics_data_details=details,
-            )
+            summarize_kwargs: dict[str, Any] = {
+                "compartment_id": request.compartment_id,
+                "summarize_metrics_data_details": details,
+            }
+            if request.include_subcompartments:
+                summarize_kwargs["compartment_id_in_subtree"] = True
+            response = session.monitoring_client.summarize_metrics_data(**summarize_kwargs)
             for metric_data in response.data:
                 dimensions = metric_data.dimensions or {}
                 resource_id = dimensions.get("resourceId") or dimensions.get("resourceDisplayName")
@@ -153,11 +161,19 @@ class OciSdkExecutionAdapter:
             )
         return ExecutionResult(summary=summary, rows=rows, chart_series=chart_series)
 
-    def _list_instances(self, oci: Any, compute_client: Any, compartment_id: str) -> dict[str, dict[str, str]]:
-        response = oci.pagination.list_call_get_all_results(
-            compute_client.list_instances,
-            compartment_id=compartment_id,
-        )
+    def _list_instances(
+        self,
+        oci: Any,
+        compute_client: Any,
+        compartment_id: str,
+        *,
+        include_subcompartments: bool,
+    ) -> dict[str, dict[str, str]]:
+        list_kwargs: dict[str, Any] = {"compartment_id": compartment_id}
+        if include_subcompartments:
+            list_kwargs["compartment_id_in_subtree"] = True
+            list_kwargs["access_level"] = "ACCESSIBLE"
+        response = oci.pagination.list_call_get_all_results(compute_client.list_instances, **list_kwargs)
         return {
             instance.id: {
                 "id": instance.id,

@@ -137,6 +137,7 @@ class QueryExecutionRequest:
     region: str
     compartment_name: str
     compartment_id: str | None
+    include_subcompartments: bool = True
     auth_mode: str = "instance_principal"
     config_fallback: dict[str, str] = field(default_factory=dict)
 

@@ -242,6 +242,9 @@ The prototype exposes these tools:
 - `now do the same for memory`
 - `show CPU trend for app-01`
 - `show me compute io`
+- `show CPU utilization across tenancy for last 1 hour`
+- `show CPU utilization in compartment ProdMgmt for last 24 hours`
+- `show CPU utilization in compartment ProdMgmt without subcompartments for last 1 hour`
 
 ## 11. Expected Behavior
 - If region/compartment are not saved yet, the server asks for them.
@@ -252,6 +255,7 @@ The prototype exposes these tools:
 - `GET /healthz` returns a simple `200` JSON payload when the service is up.
 - MCP endpoint checks against `/mcp` with plain curl may show protocol errors such as
   `400 Missing session ID`; this is expected for non-MCP requests.
+- Query scope defaults to including subcompartments unless the request explicitly says not to.
 
 ## 12. Data Files
 The prototype persists local state under `data/`:
