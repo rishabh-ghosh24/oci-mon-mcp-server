@@ -91,6 +91,9 @@ export OCI_MON_MCP_ARTIFACT_PORT=8765
 export MPLCONFIGDIR=/tmp/matplotlib
 # Optional: suppress expected noisy /mcp probe access logs (404/400).
 export OCI_MON_MCP_SUPPRESS_EXPECTED_MCP_PROBE_LOGS=1
+# Optional: location for mutable per-user state files (memory/templates).
+# Defaults to <repo>/data/runtime
+export OCI_MON_MCP_STATE_DIR=/home/opc/oci-mon-mcp-server/data/runtime
 ```
 
 If you want the main MCP endpoint on a different path:
@@ -110,6 +113,7 @@ export OCI_MON_MCP_ARTIFACT_BASE_URL=http://<vm-public-ip>:8765
 export OCI_MON_MCP_ARTIFACT_HOST=0.0.0.0
 export OCI_MON_MCP_ARTIFACT_PORT=8765
 export MPLCONFIGDIR=/tmp/matplotlib
+export OCI_MON_MCP_STATE_DIR=/home/opc/oci-mon-mcp-server/data/runtime
 EOF
 
 source ~/.bashrc
@@ -228,6 +232,12 @@ The prototype exposes these tools:
 - If more than 10 rows are returned, a CSV artifact is generated for the full export.
 - For tenancy-wide queries, rows include `compartment` and `lifecycle_state` from Compute metadata
   when available.
+
+## 8.2 Seed Data and Learning
+- The repo ships generic starter templates in `data/seed_query_templates.json`.
+- The repo ships generic starter memory in `data/seed_user_memory.json`.
+- At first startup, runtime state is created under `data/runtime/` (or `OCI_MON_MCP_STATE_DIR`).
+- Runtime files are user/environment-specific and should not be committed.
 
 ### Response table format (standard)
 Use this exact table schema and order in user-facing responses for CPU utilization queries:

@@ -1,0 +1,90 @@
+[
+  {
+    "template_id": "seed_top_cpu_1h",
+    "tenancy_id": null,
+    "region": null,
+    "created_at": "2026-03-16T00:00:00+00:00",
+    "updated_at": "2026-03-16T00:00:00+00:00",
+    "intent_type": "top_n",
+    "nl_patterns": [
+      "show top 10 compute instances by cpu in the last 1 hour",
+      "cpu utilization of all compute instances for last 1 hour"
+    ],
+    "resource_type": "compute_instance",
+    "metric_key": "cpu",
+    "time_window": "1h",
+    "aggregation": "max",
+    "threshold": null,
+    "query_text": "CpuUtilization[1m].groupBy(resourceId,resourceDisplayName,compartmentId).max()",
+    "usage_count": 1,
+    "success_rate": 1.0,
+    "last_used_at": "2026-03-16T00:00:00+00:00",
+    "confidence": 0.95
+  },
+  {
+    "template_id": "seed_worst_memory_7d",
+    "tenancy_id": null,
+    "region": null,
+    "created_at": "2026-03-16T00:00:00+00:00",
+    "updated_at": "2026-03-16T00:00:00+00:00",
+    "intent_type": "worst_performing",
+    "nl_patterns": [
+      "which are the worst performing computes in terms of memory over the last 7 days",
+      "worst memory utilization compute instances last 7 days"
+    ],
+    "resource_type": "compute_instance",
+    "metric_key": "memory",
+    "time_window": "7d",
+    "aggregation": "max",
+    "threshold": null,
+    "query_text": "MemoryUtilization[1h].groupBy(resourceId,resourceDisplayName,compartmentId).max()",
+    "usage_count": 1,
+    "success_rate": 1.0,
+    "last_used_at": "2026-03-16T00:00:00+00:00",
+    "confidence": 0.95
+  },
+  {
+    "template_id": "seed_cpu_threshold_80_1h",
+    "tenancy_id": null,
+    "region": null,
+    "created_at": "2026-03-16T00:00:00+00:00",
+    "updated_at": "2026-03-16T00:00:00+00:00",
+    "intent_type": "threshold",
+    "nl_patterns": [
+      "show me all compute instances with cpu utilization above 80% in the last 1 hour",
+      "find compute instances with cpu higher than 80 in last hour"
+    ],
+    "resource_type": "compute_instance",
+    "metric_key": "cpu",
+    "time_window": "1h",
+    "aggregation": "max",
+    "threshold": 80.0,
+    "query_text": "CpuUtilization[1m].groupBy(resourceId,resourceDisplayName,compartmentId).max()",
+    "usage_count": 1,
+    "success_rate": 1.0,
+    "last_used_at": "2026-03-16T00:00:00+00:00",
+    "confidence": 0.95
+  },
+  {
+    "template_id": "seed_named_memory_24h",
+    "tenancy_id": null,
+    "region": null,
+    "created_at": "2026-03-16T00:00:00+00:00",
+    "updated_at": "2026-03-16T00:00:00+00:00",
+    "intent_type": "named_trend",
+    "nl_patterns": [
+      "show memory trend for app-01 for last 24 hours",
+      "memory utilization trend of app-01 in last day"
+    ],
+    "resource_type": "compute_instance",
+    "metric_key": "memory",
+    "time_window": "24h",
+    "aggregation": "max",
+    "threshold": null,
+    "query_text": "MemoryUtilization[5m]{resourceDisplayName = \"app-01\"}.max()",
+    "usage_count": 1,
+    "success_rate": 1.0,
+    "last_used_at": "2026-03-16T00:00:00+00:00",
+    "confidence": 0.95
+  }
+]

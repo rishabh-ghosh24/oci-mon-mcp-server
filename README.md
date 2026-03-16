@@ -13,8 +13,9 @@ MCP server that connects AI assistants to OCI Monitoring service. Query, analyze
 │   ├── PRODUCT_TECH_NOTES.md
 │   └── QUICKSTART.md
 ├── data/
-│   ├── query_templates.json
-│   └── user_memory.json
+│   ├── seed_query_templates.json
+│   ├── seed_user_memory.json
+│   └── runtime/ (auto-created local state; gitignored)
 ├── src/
 │   └── oci_mon_mcp/
 │       ├── __init__.py
@@ -42,6 +43,7 @@ MCP server that connects AI assistants to OCI Monitoring service. Query, analyze
 - Instance Principals first, OCI config fallback support
 - Structured response with summary, tables, charts, recommendations, and CSV export when needed
 - Tokenized PNG and CSV artifact URLs
+- Seeded generic templates and preferences for better first-run behavior across users
 
 ## Run
 See `docs/QUICKSTART.md` for the VM runbook and first test sequence.

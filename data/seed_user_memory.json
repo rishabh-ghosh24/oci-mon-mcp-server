@@ -1,0 +1,27 @@
+{
+  "profiles": {
+    "default": {
+      "profile_id": "default",
+      "tenancy_id": "unknown",
+      "region": null,
+      "default_compartment_id": null,
+      "default_compartment_name": null,
+      "available_compartments": [],
+      "auth_mode": "instance_principal",
+      "config_fallback": {
+        "config_path": "~/.oci/config",
+        "profile": "DEFAULT"
+      },
+      "learned_preferences": [
+        {
+          "intent_key": "worst_performing_compute_instances",
+          "resolved_metric": "cpu",
+          "confidence": 0.75,
+          "last_used_at": "2026-03-16T00:00:00+00:00"
+        }
+      ],
+      "pending_clarification": null,
+      "last_resolved_context": {}
+    }
+  }
+}

@@ -38,6 +38,10 @@ oci_api_key*.pem
 logs/
 tmp/
 .tmp/
+data/artifacts/
+data/runtime/
+data/query_templates.json
+data/user_memory.json
 
 # macOS
 .DS_Store

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,16 +26,59 @@ class JsonRepository:
 
     def __init__(self, data_dir: Path | None = None) -> None:
         self.data_dir = data_dir or default_data_dir()
-        self.memory_path = self.data_dir / "user_memory.json"
-        self.templates_path = self.data_dir / "query_templates.json"
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self._ensure_file(self.memory_path, {"profiles": {}})
-        self._ensure_file(self.templates_path, [])
+        runtime_dir = Path(
+            os.getenv("OCI_MON_MCP_STATE_DIR", str(self.data_dir / "runtime"))
+        )
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+
+        # Runtime, user-specific state paths.
+        self.memory_path = runtime_dir / "user_memory.json"
+        self.templates_path = runtime_dir / "query_templates.json"
+
+        # Repo-tracked generic bootstrap data.
+        self.seed_memory_path = self.data_dir / "seed_user_memory.json"
+        self.seed_templates_path = self.data_dir / "seed_query_templates.json"
+
+        # Legacy in-repo mutable state paths used by older versions.
+        self.legacy_memory_path = self.data_dir / "user_memory.json"
+        self.legacy_templates_path = self.data_dir / "query_templates.json"
+
+        self._ensure_runtime_file(
+            target_path=self.memory_path,
+            default_value={"profiles": {}},
+            seed_path=self.seed_memory_path,
+            legacy_path=self.legacy_memory_path,
+        )
+        self._ensure_runtime_file(
+            target_path=self.templates_path,
+            default_value=[],
+            seed_path=self.seed_templates_path,
+            legacy_path=self.legacy_templates_path,
+        )
 
     def _ensure_file(self, path: Path, default_value: Any) -> None:
         if path.exists():
             return
         path.write_text(json.dumps(default_value, indent=2) + "\n", encoding="utf-8")
+
+    def _ensure_runtime_file(
+        self,
+        *,
+        target_path: Path,
+        default_value: Any,
+        seed_path: Path,
+        legacy_path: Path,
+    ) -> None:
+        if target_path.exists():
+            return
+        if legacy_path.exists():
+            shutil.copy2(legacy_path, target_path)
+            return
+        if seed_path.exists():
+            shutil.copy2(seed_path, target_path)
+            return
+        self._ensure_file(target_path, default_value)
 
     def _read_json(self, path: Path, default_value: Any) -> Any:
         if not path.exists():
@@ -199,7 +244,10 @@ class JsonRepository:
         return [
             template
             for template in templates
-            if template.get("region") == region and template.get("tenancy_id") == tenancy_id
+            if (
+                (template.get("region") in {None, region})
+                and (template.get("tenancy_id") in {None, tenancy_id})
+            )
         ]
 
     def save_template(
