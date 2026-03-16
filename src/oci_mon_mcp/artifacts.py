@@ -75,6 +75,7 @@ class ArtifactManager:
             import matplotlib
 
             matplotlib.use("Agg")
+            import matplotlib.dates as mdates
             import matplotlib.pyplot as plt
         except ImportError as exc:  # pragma: no cover - environment dependent
             raise DependencyMissingError(
@@ -100,6 +101,11 @@ class ArtifactManager:
             ax.set_title(chart.title)
             ax.set_xlabel(chart.x_axis.replace("_", " ").title())
             ax.set_ylabel(chart.y_axis.replace("_", " ").title())
+            locator = mdates.AutoDateLocator(minticks=4, maxticks=8)
+            formatter = mdates.ConciseDateFormatter(locator)
+            ax.xaxis.set_major_locator(locator)
+            ax.xaxis.set_major_formatter(formatter)
+            ax.tick_params(axis="x", labelrotation=30)
             ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5))
             ax.grid(True, linestyle=":", linewidth=0.5)
             fig.tight_layout()

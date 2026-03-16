@@ -96,6 +96,37 @@ If you want the main MCP endpoint on a different path:
 export OCI_MON_MCP_STREAMABLE_HTTP_PATH=/mcp
 ```
 
+### Optional: persist runtime env vars once (recommended)
+If you usually run the server manually, save exports in `~/.bashrc` once:
+
+```bash
+cat >> ~/.bashrc <<'EOF'
+export OCI_MON_MCP_HOST=0.0.0.0
+export OCI_MON_MCP_PORT=8000
+export OCI_MON_MCP_TRANSPORT=streamable-http
+export OCI_MON_MCP_ARTIFACT_BASE_URL=http://<vm-public-ip>:8765
+export OCI_MON_MCP_ARTIFACT_HOST=0.0.0.0
+export OCI_MON_MCP_ARTIFACT_PORT=8765
+export MPLCONFIGDIR=/tmp/matplotlib
+EOF
+
+source ~/.bashrc
+```
+
+If you run with systemd, prefer an environment file:
+
+```bash
+sudo tee /etc/oci-mon-mcp-server.env >/dev/null <<'EOF'
+OCI_MON_MCP_HOST=0.0.0.0
+OCI_MON_MCP_PORT=8000
+OCI_MON_MCP_TRANSPORT=streamable-http
+OCI_MON_MCP_ARTIFACT_BASE_URL=http://<vm-public-ip>:8765
+OCI_MON_MCP_ARTIFACT_HOST=0.0.0.0
+OCI_MON_MCP_ARTIFACT_PORT=8765
+MPLCONFIGDIR=/tmp/matplotlib
+EOF
+```
+
 ## 7. Start the Server
 ```bash
 oci-mon-mcp-server
@@ -104,6 +135,26 @@ oci-mon-mcp-server
 Equivalent:
 ```bash
 python -m oci_mon_mcp.server
+```
+
+### Optional: quick redeploy and restart (manual/no systemd)
+Use this after pulling changes:
+
+```bash
+cd /home/opc/oci-mon-mcp-server
+source .venv/bin/activate
+pip install -e .
+pkill -f "oci_mon_mcp.server|oci-mon-mcp-server" || true
+nohup oci-mon-mcp-server >/tmp/oci-mon-mcp.log 2>&1 &
+tail -n 40 /tmp/oci-mon-mcp.log
+```
+
+### Optional: quick restart with systemd
+If you manage the service with systemd:
+
+```bash
+sudo systemctl restart oci-mon-mcp-server
+sudo systemctl status oci-mon-mcp-server --no-pager -l
 ```
 
 Client connection setup is documented in `docs/CLIENT_SETUP.md`.
