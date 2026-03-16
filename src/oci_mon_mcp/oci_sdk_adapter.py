@@ -173,7 +173,14 @@ class OciSdkExecutionAdapter:
         if include_subcompartments:
             list_kwargs["compartment_id_in_subtree"] = True
             list_kwargs["access_level"] = "ACCESSIBLE"
-        response = oci.pagination.list_call_get_all_results(compute_client.list_instances, **list_kwargs)
+        try:
+            response = oci.pagination.list_call_get_all_results(compute_client.list_instances, **list_kwargs)
+        except TypeError:
+            # Some SDK/client variants do not accept subtree kwargs on list_instances.
+            response = oci.pagination.list_call_get_all_results(
+                compute_client.list_instances,
+                compartment_id=compartment_id,
+            )
         return {
             instance.id: {
                 "id": instance.id,
