@@ -11,6 +11,10 @@ flow from natural-language query to live metric results.
 - network egress from the VM to OCI APIs
 - public access to the VM if you want remote clients to open artifact URLs directly
 
+Important:
+- run the install commands from the repository root, the directory that contains `pyproject.toml`
+- use Python 3.11 explicitly; many OEL images still default `python3` to 3.9
+
 ## 3. Auth Model
 - Preferred: Instance Principals
 - Fallback: OCI config profile
@@ -38,8 +42,25 @@ Allow dynamic-group <mcp_vm_dynamic_group> to read metrics in tenancy
 Validate policy syntax in OCI before rollout.
 
 ## 5. Install
+If Python 3.11 is not installed yet:
+
 ```bash
-python3 -m venv .venv
+sudo dnf install -y python3.11 python3.11-devel
+```
+
+Clone the repo and move into it:
+
+```bash
+git clone <your-repo-url> /home/opc/oci-mon-mcp-server
+cd /home/opc/oci-mon-mcp-server
+ls pyproject.toml
+python3.11 --version
+```
+
+Create the virtualenv with Python 3.11:
+
+```bash
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
 pip install -e .
@@ -49,6 +70,8 @@ For local development and tests:
 ```bash
 pip install -e ".[dev]"
 ```
+
+If `ls pyproject.toml` fails, you are not in the repo root yet.
 
 ## 6. Runtime Environment
 Set these before starting the server on the VM:
@@ -136,3 +159,6 @@ The prototype persists local state under `data/`:
 - `storage usage %` inside the instance is intentionally reported as unavailable from standard OCI
   Monitoring metrics alone.
 - Disk I/O is supported after clarification.
+- If you see `does not appear to be a Python project`, you are running `pip install -e ...` outside
+  the repository root.
+- If you see Python 3.9 in the virtualenv, recreate it with `python3.11 -m venv .venv`.
