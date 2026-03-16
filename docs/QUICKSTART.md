@@ -195,6 +195,12 @@ sudo systemctl restart oci-mon-mcp-server
 sudo systemctl status oci-mon-mcp-server --no-pager -l
 ```
 
+Health check endpoint (recommended for probes/uptime checks):
+
+```bash
+curl -i http://127.0.0.1:8000/healthz
+```
+
 If startup fails, inspect logs:
 
 ```bash
@@ -243,6 +249,9 @@ The prototype exposes these tools:
 - If rows exceed the on-screen limit, the response includes a CSV artifact URL.
 - If chart data is available, the response includes a PNG artifact URL.
 - If Instance Principals fail, the server can prompt for OCI config fallback.
+- `GET /healthz` returns a simple `200` JSON payload when the service is up.
+- MCP endpoint checks against `/mcp` with plain curl may show protocol errors such as
+  `400 Missing session ID`; this is expected for non-MCP requests.
 
 ## 12. Data Files
 The prototype persists local state under `data/`:

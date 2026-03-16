@@ -34,6 +34,35 @@ def create_mcp_server() -> Any:
         mount_path=os.getenv("OCI_MON_MCP_MOUNT_PATH", "/"),
         streamable_http_path=os.getenv("OCI_MON_MCP_STREAMABLE_HTTP_PATH", "/mcp"),
     )
+    streamable_path = os.getenv("OCI_MON_MCP_STREAMABLE_HTTP_PATH", "/mcp")
+
+    if hasattr(mcp, "custom_route"):
+        from starlette.responses import JSONResponse
+
+        @mcp.custom_route("/healthz", methods=["GET"])
+        async def healthz(_request):
+            """Simple health endpoint for uptime checks and load balancers."""
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "service": "oci-mon-mcp-server",
+                    "transport": os.getenv("OCI_MON_MCP_TRANSPORT", "streamable-http"),
+                    "mcp_path": streamable_path,
+                }
+            )
+
+        @mcp.custom_route("/", methods=["GET"])
+        async def root(_request):
+            """Human-friendly root endpoint to reduce MCP path confusion."""
+            return JSONResponse(
+                {
+                    "service": "OCI Monitoring MCP",
+                    "status": "running",
+                    "health": "/healthz",
+                    "mcp_endpoint": streamable_path,
+                    "note": "Use an MCP client against mcp_endpoint; plain HTTP requests may return protocol errors.",
+                }
+            )
 
     @mcp.tool()
     def monitoring_assistant(query: str, profile_id: str = "default"):
