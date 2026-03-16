@@ -626,7 +626,7 @@ class MonitoringAssistantService:
                 intent="worst_performing",
                 metric_key=metric_key,
                 time_range=self._extract_time_range(normalized) or "1h",
-                top_n=self._extract_top_n(normalized) or 5,
+                top_n=self._extract_top_n(normalized) or 10,
                 learned_intent_key="worst_performing_compute_instances",
             )
 
@@ -648,7 +648,7 @@ class MonitoringAssistantService:
                 intent="top_n",
                 metric_key=metric_key,
                 time_range=self._extract_time_range(normalized) or "1h",
-                top_n=self._extract_top_n(normalized) or 5,
+                top_n=self._extract_top_n(normalized) or 10,
             )
 
         if "trend for" in normalized or "trend of" in normalized:
@@ -744,7 +744,7 @@ class MonitoringAssistantService:
             if requested_top_n is None and self._requests_all_instances(normalized):
                 requested_top_n = None
             elif requested_top_n is None:
-                requested_top_n = 5
+                requested_top_n = 10
             return self._build_parsed_query(
                 source_query=query,
                 intent="top_n",
@@ -774,7 +774,7 @@ class MonitoringAssistantService:
         partial: dict[str, Any] = {
             "intent": "top_n",
             "time_range": self._extract_time_range(normalized) or "1h",
-            "top_n": self._extract_top_n(normalized) or 5,
+            "top_n": self._extract_top_n(normalized) or 10,
         }
         if io_type is None:
             unresolved.append("io_type")

@@ -156,6 +156,7 @@ class OciSdkExecutionAdapter:
 
         if request.parsed_query.top_n:
             rows = rows[: request.parsed_query.top_n]
+            chart_series = chart_series[: request.parsed_query.top_n]
 
         if request.parsed_query.intent == "named_trend" and request.parsed_query.instance_name:
             summary = (

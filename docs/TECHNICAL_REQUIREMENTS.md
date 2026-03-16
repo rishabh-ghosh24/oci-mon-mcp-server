@@ -418,14 +418,14 @@ This is required so the server can:
 ## 12. Output and Artifact Requirements
 
 ### 12.1 Table Output Rules
-- default on-screen row limit: 20
-- if user requests more rows, allow up to 100 on screen
+- default on-screen row limit: 10
+- keep on-screen output capped at 10 for consistency
 - export full result set to CSV when rows exceed the visible limit or when the user requests export
 
 ### 12.2 Chart Output Rules
 For threshold/top compute flows:
 - generate a line chart by default
-- chart only the top 5 offenders
+- chart only the top 10 offenders
 - place legend on the right
 - include threshold line when applicable using light or mid blue and slightly thicker stroke
 
@@ -561,9 +561,9 @@ Scope this store by:
   was truncated.
 
 ### 15.2 Prototype Limits
-- chart top 5 series only
-- default visible rows 20
-- maximum visible rows 100 on request
+- chart top 10 series only
+- default visible rows 10
+- keep visible rows capped at 10 for consistency
 - broader result sets should be export-only beyond the visible limit
 - default scope is one compartment only unless explicitly widened
 
@@ -629,7 +629,7 @@ The implementation must include automated or manual verification for at least th
 5. `show CPU trend for <instance-name>`
 6. `show me computes with high memory`
 7. clarification reply: `85%`
-8. `show me top 5 compute instances by CPU in the last 24 hours`
+8. `show me top 10 compute instances by CPU in the last 24 hours`
 9. `show me compute storage utilization`
 10. `show me compute io`
 11. clarification reply: `disk io`

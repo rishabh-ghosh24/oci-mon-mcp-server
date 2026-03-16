@@ -171,14 +171,14 @@ Every successful response should, by default, include:
 
 ### 11.1 Visualization Expectations
 - Default chart for threshold/top compute metric flows is a line chart.
-- Show one line per instance for the top 5 offenders only.
+- Show one line per instance for the top 10 offenders only.
 - Put the legend on the right.
 - If a threshold is part of the query, draw a slightly thicker threshold line in mid/light blue.
 
 ### 11.2 Table Expectations
 Default on-screen table behavior:
-- show up to 20 rows by default
-- if the user wants more, ask how many rows to show, up to 100
+- show up to 10 rows by default
+- keep on-screen rows capped at 10 for consistency
 - if more rows exist, provide a CSV export for the full result set
 
 ### 11.3 Sorting Expectations
@@ -191,7 +191,7 @@ Default on-screen table behavior:
 When no resources match:
 - say that no compute instances crossed the requested threshold in the selected window and
   compartment
-- still show a chart when useful for the top 5 highest instances in that window
+- still show a chart when useful for the top 10 highest instances in that window
 - mention the highest observed value, which instance reached it, and when it happened
 
 ## 13. Recommendations
