@@ -85,9 +85,25 @@ class ArtifactManager:
         artifact_id = uuid4().hex
         path = self.base_dir / f"{artifact_id}.png"
         fig, ax = plt.subplots(figsize=(12, 6))
+        uses_datetime_x_axis = True
+        for series in chart.series:
+            for point in series.points:
+                try:
+                    datetime.fromisoformat(point.time.replace("Z", "+00:00"))
+                except ValueError:
+                    uses_datetime_x_axis = False
+                    break
+            if not uses_datetime_x_axis:
+                break
         try:
             for series in chart.series:
-                x_values = [point.time for point in series.points]
+                if uses_datetime_x_axis:
+                    x_values = [
+                        datetime.fromisoformat(point.time.replace("Z", "+00:00"))
+                        for point in series.points
+                    ]
+                else:
+                    x_values = [point.time for point in series.points]
                 y_values = [point.value for point in series.points]
                 ax.plot(x_values, y_values, linewidth=1.5, label=series.name)
             if chart.threshold_line is not None:
@@ -101,10 +117,11 @@ class ArtifactManager:
             ax.set_title(chart.title)
             ax.set_xlabel(chart.x_axis.replace("_", " ").title())
             ax.set_ylabel(chart.y_axis.replace("_", " ").title())
-            locator = mdates.AutoDateLocator(minticks=4, maxticks=8)
-            formatter = mdates.ConciseDateFormatter(locator)
-            ax.xaxis.set_major_locator(locator)
-            ax.xaxis.set_major_formatter(formatter)
+            if uses_datetime_x_axis:
+                locator = mdates.AutoDateLocator(minticks=4, maxticks=8)
+                formatter = mdates.ConciseDateFormatter(locator)
+                ax.xaxis.set_major_locator(locator)
+                ax.xaxis.set_major_formatter(formatter)
             ax.tick_params(axis="x", labelrotation=30)
             ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5))
             ax.grid(True, linestyle=":", linewidth=0.5)
