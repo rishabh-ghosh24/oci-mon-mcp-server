@@ -737,12 +737,17 @@ class MonitoringAssistantService:
             )
 
         if "compute" in normalized and metric_key in {"cpu", "memory"}:
+            requested_top_n = self._extract_top_n(normalized)
+            if requested_top_n is None and self._requests_all_instances(normalized):
+                requested_top_n = None
+            elif requested_top_n is None:
+                requested_top_n = 5
             return self._build_parsed_query(
                 source_query=query,
                 intent="top_n",
                 metric_key=metric_key,
                 time_range=self._extract_time_range(normalized) or "1h",
-                top_n=self._extract_top_n(normalized) or 5,
+                top_n=requested_top_n,
             )
 
         return AssistantResponse(
@@ -897,6 +902,9 @@ class MonitoringAssistantService:
                 compartment_name=scope["compartment_name"],
                 compartment_id=scope["compartment_id"],
                 include_subcompartments=scope["include_subcompartments"],
+                compartment_lookup={
+                    item["id"]: item["name"] for item in profile.get("available_compartments", [])
+                },
                 auth_mode=profile.get("auth_mode", "instance_principal"),
                 config_fallback=profile.get("config_fallback", {}),
             )
@@ -1453,6 +1461,19 @@ class MonitoringAssistantService:
         if match:
             return int(match.group(1))
         return None
+
+    def _requests_all_instances(self, text: str) -> bool:
+        return any(
+            phrase in text
+            for phrase in (
+                "all compute",
+                "all computes",
+                "all compute instances",
+                "all instances",
+                "every compute",
+                "every instance",
+            )
+        )
 
     def _extract_instance_name(self, text: str) -> str | None:
         match = re.search(r"(?:trend for|trend of)\s+(.+)$", text, re.IGNORECASE)

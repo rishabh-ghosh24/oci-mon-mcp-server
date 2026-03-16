@@ -89,12 +89,19 @@ class OciSdkExecutionAdapter:
                     continue
                 instance = streams[resource_id]
                 metadata = instance_index.get(resource_id, {})
+                compartment_id = dimensions.get("compartmentId") or metadata.get("compartment_id")
+                compartment_name = (
+                    request.compartment_lookup.get(compartment_id, compartment_id)
+                    if compartment_id
+                    else request.compartment_name
+                )
                 instance["instance_name"] = (
                     dimensions.get("resourceDisplayName")
                     or metadata.get("display_name")
                     or resource_id
                 )
                 instance["instance_ocid"] = dimensions.get("resourceId") or metadata.get("id")
+                instance["compartment"] = compartment_name
                 instance["lifecycle_state"] = metadata.get("lifecycle_state", "UNKNOWN")
 
                 points = sorted(
@@ -192,6 +199,7 @@ class OciSdkExecutionAdapter:
                 "id": instance.id,
                 "display_name": instance.display_name,
                 "lifecycle_state": instance.lifecycle_state,
+                "compartment_id": getattr(instance, "compartment_id", None),
             }
             for instance in response.data
         }

@@ -138,6 +138,7 @@ class QueryExecutionRequest:
     compartment_name: str
     compartment_id: str | None
     include_subcompartments: bool = True
+    compartment_lookup: dict[str, str] = field(default_factory=dict)
     auth_mode: str = "instance_principal"
     config_fallback: dict[str, str] = field(default_factory=dict)
 
@@ -157,7 +158,7 @@ class QueryExecutionRequest:
             else:
                 metric_queries.append(
                     f"{metric_name}[{self.parsed_query.interval}]"
-                    f".groupBy(resourceId,resourceDisplayName)"
+                    f".groupBy(resourceId,resourceDisplayName,compartmentId)"
                     f".{self.parsed_query.aggregation}()"
                 )
         return "\n".join(metric_queries)
