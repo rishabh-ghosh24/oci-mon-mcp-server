@@ -229,6 +229,19 @@ The prototype exposes these tools:
 - For tenancy-wide queries, rows include `compartment` and `lifecycle_state` from Compute metadata
   when available.
 
+### Response table format (standard)
+Use this exact table schema and order in user-facing responses for CPU utilization queries:
+
+| Instance | Compartment | Lifecycle | Max CPU % | Time of Max (UTC) | Latest CPU % |
+|---|---|---|---:|---|---:|
+| `<instance_name>` | `<compartment>` | `<lifecycle_state>` | `<max_value_2dp>` | `<time_of_max_iso>` | `<latest_value_2dp>` |
+
+Formatting rules:
+- Keep exactly these 6 columns, in this order.
+- Use 2 decimal places for `Max CPU %` and `Latest CPU %`.
+- Keep `Time of Max (UTC)` in ISO-8601 UTC format.
+- Show top 10 rows in the table; include CSV artifact for full row set.
+
 ## 9. First Test Sequence
 
 ### Option A: manual context setup
