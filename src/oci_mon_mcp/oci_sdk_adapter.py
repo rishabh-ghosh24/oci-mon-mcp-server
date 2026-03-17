@@ -141,7 +141,8 @@ class OciSdkExecutionAdapter:
         rows, chart_series = self._normalize_results(request, streams)
         metric_label = request.parsed_query.metric_label.lower()
         if request.parsed_query.intent == "threshold":
-            matched = [row for row in rows if row["max_value"] > float(request.parsed_query.threshold or 0)]
+            threshold_value = float(request.parsed_query.threshold or 0)
+            matched = [row for row in rows if row.get("aggregated_value", 0.0) > threshold_value]
             if not matched:
                 highest = rows[0] if rows else None
                 if highest is None:
@@ -149,11 +150,12 @@ class OciSdkExecutionAdapter:
                         f"No recent {metric_label} datapoints were found in {request.compartment_name}."
                     )
                 else:
+                    highest_time = highest.get("time_of_aggregate") or highest.get("time_of_max") or "N/A"
                     summary = (
                         f"No compute instances crossed {request.parsed_query.threshold:.0f}% {metric_label} "
                         f"in the last {request.parsed_query.time_range} in {request.compartment_name}. "
-                        f"The highest observed value was {highest['max_value']:.1f}% on "
-                        f"{highest['instance_name']} at {highest['time_of_max']}."
+                        f"The highest observed value was {highest.get('aggregated_value', 0.0):.1f}% on "
+                        f"{highest['instance_name']} at {highest_time}."
                     )
                 return ExecutionResult(
                     summary=summary,
@@ -266,15 +268,51 @@ class OciSdkExecutionAdapter:
     ) -> tuple[list[dict[str, Any]], list[ChartSeries]]:
         rows: list[dict[str, Any]] = []
         chart_candidates: list[tuple[float, ChartSeries]] = []
+        aggregation = request.parsed_query.aggregation
         for stream in streams.values():
+            if request.parsed_query.metric_key == "cpu_memory":
+                cpu_points = stream["points"].get("CpuUtilization", [])
+                memory_points = stream["points"].get("MemoryUtilization", [])
+                if not cpu_points or not memory_points:
+                    continue
+                cpu_stats = self._compute_metric_stats(cpu_points)
+                memory_stats = self._compute_metric_stats(memory_points)
+                assert cpu_stats is not None
+                assert memory_stats is not None
+                cpu_agg = self._value_for_aggregation(cpu_stats, aggregation)
+                memory_agg = self._value_for_aggregation(memory_stats, aggregation)
+                row = {
+                    "instance_name": stream["instance_name"],
+                    "instance_ocid": stream["instance_ocid"],
+                    "compartment": stream["compartment"],
+                    "lifecycle_state": stream["lifecycle_state"],
+                    "metric": request.parsed_query.metric_label,
+                    "threshold": request.parsed_query.threshold,
+                    "aggregation": aggregation,
+                    "cpu_mean_value": cpu_stats["mean_value"],
+                    "memory_mean_value": memory_stats["mean_value"],
+                    "cpu_max_value": cpu_stats["max_value"],
+                    "memory_max_value": memory_stats["max_value"],
+                    "cpu_latest_value": cpu_stats["latest_value"],
+                    "memory_latest_value": memory_stats["latest_value"],
+                    "aggregated_value": cpu_agg + memory_agg,
+                    "time_of_aggregate": None,
+                    "recommendation": "",
+                }
+                rows.append(row)
+                continue
+
             merged_points = self._merge_metric_points(
                 stream=stream,
                 metric_names=request.parsed_query.metric_names,
             )
             if not merged_points:
                 continue
-            max_point = max(merged_points, key=lambda item: item[1])
-            latest_point = merged_points[-1]
+            stats = self._compute_metric_stats(merged_points)
+            if stats is None:
+                continue
+            aggregated_value = self._value_for_aggregation(stats, aggregation)
+            time_of_aggregate = stats["time_of_max"] if aggregation == "max" else None
             row = {
                 "instance_name": stream["instance_name"],
                 "instance_ocid": stream["instance_ocid"],
@@ -282,15 +320,19 @@ class OciSdkExecutionAdapter:
                 "lifecycle_state": stream["lifecycle_state"],
                 "metric": request.parsed_query.metric_label,
                 "threshold": request.parsed_query.threshold,
-                "max_value": max_point[1],
-                "time_of_max": max_point[0],
-                "latest_value": latest_point[1],
+                "aggregation": aggregation,
+                "mean_value": stats["mean_value"],
+                "max_value": stats["max_value"],
+                "time_of_max": stats["time_of_max"],
+                "latest_value": stats["latest_value"],
+                "aggregated_value": aggregated_value,
+                "time_of_aggregate": time_of_aggregate,
                 "recommendation": "",
             }
             rows.append(row)
             chart_candidates.append(
                 (
-                    max_point[1],
+                    aggregated_value,
                     ChartSeries(
                         name=str(stream["instance_name"]),
                         points=[ChartPoint(time=time_str, value=value) for time_str, value in merged_points],
@@ -298,13 +340,44 @@ class OciSdkExecutionAdapter:
                 )
             )
 
-        rows.sort(key=lambda row: (row["time_of_max"], row["max_value"]), reverse=True)
+        rows.sort(
+            key=lambda row: (
+                row.get("time_of_aggregate") or row.get("time_of_max") or "",
+                row.get("aggregated_value", 0.0),
+            ),
+            reverse=True,
+        )
         if request.parsed_query.intent in {"top_n", "worst_performing"}:
-            rows.sort(key=lambda row: row["max_value"], reverse=True)
+            rows.sort(key=lambda row: row.get("aggregated_value", 0.0), reverse=True)
 
         chart_candidates.sort(key=lambda item: item[0], reverse=True)
         chart_series = [series for _, series in chart_candidates]
         return rows, chart_series
+
+    def _compute_metric_stats(
+        self,
+        points: list[tuple[str, float]],
+    ) -> dict[str, float | str] | None:
+        if not points:
+            return None
+        max_point = max(points, key=lambda item: item[1])
+        latest_point = points[-1]
+        mean_value = sum(value for _, value in points) / len(points)
+        return {
+            "max_value": max_point[1],
+            "time_of_max": max_point[0],
+            "latest_value": latest_point[1],
+            "mean_value": mean_value,
+        }
+
+    def _value_for_aggregation(
+        self,
+        stats: dict[str, float | str],
+        aggregation: str,
+    ) -> float:
+        if aggregation == "mean":
+            return float(stats["mean_value"])
+        return float(stats["max_value"])
 
     def _merge_metric_points(
         self,

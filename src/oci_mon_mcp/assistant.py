@@ -52,6 +52,12 @@ METRIC_CONFIGS: dict[str, dict[str, Any]] = {
         "metric_names": ["MemoryUtilization"],
         "y_axis": "memory_utilization_percent",
     },
+    "cpu_memory": {
+        "label": "CPU and memory utilization",
+        "namespace": "oci_computeagent",
+        "metric_names": ["CpuUtilization", "MemoryUtilization"],
+        "y_axis": "utilization_percent",
+    },
     "disk_io_throughput": {
         "label": "Disk I/O throughput",
         "namespace": "oci_computeagent",
@@ -566,6 +572,7 @@ class MonitoringAssistantService:
     ) -> ParsedQuery | AssistantResponse:
         normalized = " ".join(query.lower().split())
         last_context = profile.get("last_resolved_context", {})
+        aggregation = self._extract_aggregation(normalized)
 
         if any(token in normalized for token in ("database", "vcn", "anomal", "alert")):
             return AssistantResponse(
@@ -608,6 +615,7 @@ class MonitoringAssistantService:
                     "partial": {
                         "intent": "worst_performing",
                         "time_range": self._extract_time_range(normalized) or "1h",
+                        "aggregation": aggregation,
                         "unresolved": ["metric_choice"],
                     },
                 }
@@ -626,6 +634,7 @@ class MonitoringAssistantService:
                 intent="worst_performing",
                 metric_key=metric_key,
                 time_range=self._extract_time_range(normalized) or "1h",
+                aggregation=aggregation,
                 top_n=self._extract_top_n(normalized) or 10,
                 learned_intent_key="worst_performing_compute_instances",
             )
@@ -648,6 +657,7 @@ class MonitoringAssistantService:
                 intent="top_n",
                 metric_key=metric_key,
                 time_range=self._extract_time_range(normalized) or "1h",
+                aggregation=aggregation,
                 top_n=self._extract_top_n(normalized) or 10,
             )
 
@@ -672,6 +682,7 @@ class MonitoringAssistantService:
                 intent="named_trend",
                 metric_key=metric_key,
                 time_range=self._extract_time_range(normalized) or last_context.get("time_range") or "1h",
+                aggregation=aggregation,
                 instance_name=instance_name,
             )
 
@@ -689,6 +700,7 @@ class MonitoringAssistantService:
                 intent=inherited.get("intent", "threshold"),
                 metric_key=follow_up_metric,
                 time_range=self._extract_time_range(normalized) or inherited.get("time_range") or "1h",
+                aggregation=aggregation or inherited.get("aggregation", "max"),
                 threshold=self._extract_threshold(normalized) or inherited.get("threshold"),
                 top_n=inherited.get("top_n"),
             )
@@ -710,6 +722,7 @@ class MonitoringAssistantService:
                         "intent": "threshold",
                         "metric_key": metric_key,
                         "time_range": self._extract_time_range(normalized) or "1h",
+                        "aggregation": aggregation,
                         "unresolved": ["threshold"],
                     },
                 }
@@ -736,10 +749,11 @@ class MonitoringAssistantService:
                 intent="threshold",
                 metric_key=metric_key,
                 time_range=self._extract_time_range(normalized) or "1h",
+                aggregation=aggregation,
                 threshold=explicit_threshold,
             )
 
-        if "compute" in normalized and metric_key in {"cpu", "memory"}:
+        if "compute" in normalized and metric_key in {"cpu", "memory", "cpu_memory"}:
             requested_top_n = self._extract_top_n(normalized)
             if requested_top_n is None and self._requests_all_instances(normalized):
                 requested_top_n = None
@@ -750,6 +764,7 @@ class MonitoringAssistantService:
                 intent="top_n",
                 metric_key=metric_key,
                 time_range=self._extract_time_range(normalized) or "1h",
+                aggregation=aggregation,
                 top_n=requested_top_n,
             )
 
@@ -774,6 +789,7 @@ class MonitoringAssistantService:
         partial: dict[str, Any] = {
             "intent": "top_n",
             "time_range": self._extract_time_range(normalized) or "1h",
+            "aggregation": self._extract_aggregation(normalized),
             "top_n": self._extract_top_n(normalized) or 10,
         }
         if io_type is None:
@@ -830,6 +846,7 @@ class MonitoringAssistantService:
             intent="top_n",
             metric_key=metric_key,
             time_range=partial["time_range"],
+            aggregation=partial.get("aggregation", "max"),
             top_n=partial["top_n"],
             io_mode=partial["io_measure"],
             io_direction=partial["io_direction"],
@@ -862,6 +879,7 @@ class MonitoringAssistantService:
             intent=intent,
             metric_key=metric_key,
             time_range=partial.get("time_range", "1h"),
+            aggregation=partial.get("aggregation", "max"),
             threshold=partial.get("threshold"),
             top_n=partial.get("top_n"),
             instance_name=partial.get("instance_name"),
@@ -997,6 +1015,7 @@ class MonitoringAssistantService:
         table = self._build_table(parsed, result)
         chart = self._build_chart(parsed, result)
         generated_artifacts = list(result.artifacts)
+        csv_artifact = None
         if chart is not None:
             try:
                 chart_artifact = self.artifact_manager.generate_chart_png(chart=chart)
@@ -1040,9 +1059,16 @@ class MonitoringAssistantService:
                 "metric_key": parsed.metric_key,
                 "threshold": parsed.threshold,
                 "time_range": parsed.time_range,
+                "aggregation": parsed.aggregation,
                 "top_n": parsed.top_n,
             },
         )
+
+        summary_text = result.summary
+        if len(result.rows) > DEFAULT_TABLE_LIMIT and csv_artifact is not None:
+            summary_text += (
+                " Showing up to 10 results; download the full result set as CSV from artifacts."
+            )
 
         return AssistantResponse(
             status="success",
@@ -1050,7 +1076,7 @@ class MonitoringAssistantService:
                 parsed,
                 scope_label=scope["scope_label"],
             ),
-            summary=result.summary,
+            summary=summary_text,
             tables=[table] if table is not None else [],
             charts=[chart] if chart is not None else [],
             recommendations=result.recommendations or self._default_recommendations(
@@ -1098,6 +1124,7 @@ class MonitoringAssistantService:
         intent: str,
         metric_key: str,
         time_range: str,
+        aggregation: str = "max",
         threshold: float | None = None,
         top_n: int | None = None,
         instance_name: str | None = None,
@@ -1117,7 +1144,7 @@ class MonitoringAssistantService:
             metric_names=metric_names,
             time_range=time_range,
             interval=SUPPORTED_TIME_RANGES[time_range],
-            aggregation="max",
+            aggregation=aggregation,
             threshold=threshold,
             top_n=top_n,
             instance_name=instance_name,
@@ -1286,9 +1313,10 @@ class MonitoringAssistantService:
 
     def _interpretation_line(self, parsed: ParsedQuery, *, scope_label: str) -> str:
         metric_phrase = parsed.metric_label.lower()
+        aggregation_phrase = parsed.aggregation.lower()
         if parsed.intent == "threshold" and parsed.threshold is not None:
             return (
-                f"Interpreted as: find compute instances in {scope_label} whose max {metric_phrase} exceeded "
+                f"Interpreted as: find compute instances in {scope_label} whose {aggregation_phrase} {metric_phrase} exceeded "
                 f"{parsed.threshold:.0f}% in the last {parsed.time_range}."
             )
         if parsed.intent == "named_trend" and parsed.instance_name:
@@ -1299,11 +1327,11 @@ class MonitoringAssistantService:
             )
         if parsed.intent == "worst_performing":
             return (
-                f"Interpreted as: show the worst-performing compute instances by max {metric_phrase} "
+                f"Interpreted as: show the worst-performing compute instances by {aggregation_phrase} {metric_phrase} "
                 f"in the last {parsed.time_range} in {scope_label}."
             )
         return (
-            f"Interpreted as: show compute instances ranked by max {metric_phrase} in the last "
+            f"Interpreted as: show compute instances ranked by {aggregation_phrase} {metric_phrase} in the last "
             f"{parsed.time_range} in {scope_label}."
         )
 
@@ -1327,6 +1355,11 @@ class MonitoringAssistantService:
                     "For likely WebLogic workloads, capture heap and thread diagnostics before restarting JVMs."
                 )
             return recommendations
+        if metric_key == "cpu_memory":
+            return [
+                "Compare both CPU and memory trends before deciding whether to scale or restart.",
+                "Inspect top processes and memory growth on instances with sustained utilization.",
+            ]
         return [
             "Check read/write hotspots and attached volume behavior before changing the workload.",
             "Compare disk throughput or IOPS against the expected baseline for the instance and volume profile.",
@@ -1422,6 +1455,12 @@ class MonitoringAssistantService:
 
     def _extract_metric(self, text: str) -> str | None:
         normalized = text.lower()
+        has_cpu = "cpu" in normalized
+        has_memory = (
+            "memory" in normalized or "mem " in f"{normalized} " or normalized.endswith("mem")
+        )
+        if has_cpu and has_memory:
+            return "cpu_memory"
         if "cpu" in normalized:
             return "cpu"
         if "memory" in normalized or "mem " in f"{normalized} " or normalized.endswith("mem"):
@@ -1464,6 +1503,12 @@ class MonitoringAssistantService:
         if match:
             return int(match.group(1))
         return None
+
+    def _extract_aggregation(self, text: str) -> str:
+        normalized = text.lower()
+        if any(token in normalized for token in ("mean", "average", "avg")):
+            return "mean"
+        return "max"
 
     def _requests_all_instances(self, text: str) -> bool:
         return any(
