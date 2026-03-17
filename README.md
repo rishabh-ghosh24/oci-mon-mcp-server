@@ -58,6 +58,7 @@ python3 scripts/promote_seeds.py
 ```
 
 Notes:
-- Runtime files are read from `data/runtime/` by default.
+- Runtime files are read from `data/runtime/` by default and are shared by the VM-hosted server
+  across users/profiles.
 - Promotion intentionally strips tenancy/user-specific values (OCIDs, IPs, emails, secret-like text).
 - Review diffs before committing.

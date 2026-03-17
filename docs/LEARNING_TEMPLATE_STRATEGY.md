@@ -16,7 +16,7 @@ Improve reliability by reusing previously successful query interpretations.
 - Do not require manual user approval for template save in V1.
 
 ## Suggested Data File
-- Path: `data/query_templates.json`
+- Path: `data/runtime/query_templates.json`
 - Fields:
   - `template_id`
   - `created_at`

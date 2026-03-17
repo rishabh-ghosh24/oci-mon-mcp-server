@@ -181,6 +181,27 @@ class FakeContextResolver(OciContextResolver):
         )
 
 
+class FailingSetupResolver(FakeContextResolver):
+    """Resolver that fails compartment validation during setup."""
+
+    def resolve_compartment(
+        self,
+        *,
+        region: str,
+        auth_mode: str,
+        compartment_name: str,
+        compartment_id: str | None,
+        config_fallback: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        raise CompartmentResolutionError(
+            f"Multiple accessible compartments are named '{compartment_name}'.",
+            options=[
+                {"name": "prod-observability", "id": "ocid1.compartment.oc1..prod"},
+                {"name": "prod-observability-dr", "id": "ocid1.compartment.oc1..dr"},
+            ],
+        )
+
+
 class MonitoringAssistantServiceTests(unittest.TestCase):
     """High-value tests for setup, clarification, and follow-up behavior."""
 
@@ -221,6 +242,30 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         self.assertIn("us-ashburn-1", response.summary)
         self.assertIn("prod-observability", response.summary)
         self.assertEqual(response.details.scope["compartment_id"], "ocid1.compartment.oc1..prod")
+
+    def test_setup_default_context_does_not_save_when_validation_fails(self) -> None:
+        repository = JsonRepository(data_dir=Path(self.tempdir.name) / "invalid-setup")
+        service = MonitoringAssistantService(
+            repository=repository,
+            execution_adapter=FakeExecutionAdapter(),
+            context_resolver=FailingSetupResolver(),
+            artifact_manager=ArtifactManager(
+                base_dir=Path(self.tempdir.name) / "invalid-setup-artifacts",
+                base_url="http://127.0.0.1:9000",
+                auto_start=False,
+            ),
+        )
+
+        response = service.setup_default_context(
+            region="us-ashburn-1",
+            compartment_name="prod-observability",
+        )
+
+        self.assertEqual(response.status, "needs_clarification")
+        self.assertIn("not saved", response.summary.lower())
+        profile = repository.get_profile("default")
+        self.assertIsNone(profile["default_compartment_name"])
+        self.assertIsNone(profile["default_compartment_id"])
 
     def test_worst_performing_query_requires_metric_then_succeeds(self) -> None:
         self.service.setup_default_context(
@@ -380,6 +425,34 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         second_response = self.service.handle_query("app-01")
         self.assertEqual(second_response.status, "success")
         self.assertIn("app-01", second_response.interpretation)
+
+    def test_named_instance_query_with_time_clause_keeps_instance_name_clean(self) -> None:
+        self.service.setup_default_context(
+            region="us-ashburn-1",
+            compartment_name="prod-observability",
+        )
+
+        response = self.service.handle_query("show CPU trend for app-01 in the last 1 hour")
+
+        self.assertEqual(response.status, "success")
+        self.assertIn("app-01", response.interpretation)
+        self.assertNotIn("in the last 1 hour", response.interpretation)
+
+    def test_shared_preference_is_available_across_profiles(self) -> None:
+        repository = JsonRepository(data_dir=Path(self.tempdir.name) / "shared-preferences")
+
+        repository.remember_preference(
+            "alice",
+            intent_key="worst_performing_compute_instances",
+            resolved_metric="memory",
+        )
+
+        shared = repository.get_preference("bob", "worst_performing_compute_instances")
+
+        self.assertIsNotNone(shared)
+        assert shared is not None
+        self.assertEqual(shared["resolved_metric"], "memory")
+        self.assertEqual(shared["scope"], "shared")
 
 
 if __name__ == "__main__":

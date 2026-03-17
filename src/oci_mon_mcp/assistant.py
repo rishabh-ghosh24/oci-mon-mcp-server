@@ -84,7 +84,7 @@ NEW_QUERY_HINTS = (
     "now do the same",
 )
 
-DEFAULT_TABLE_LIMIT = 10
+DEFAULT_TABLE_LIMIT = 20
 DEFAULT_CHART_LIMIT = 10
 
 
@@ -117,14 +117,35 @@ class MonitoringAssistantService:
         profile_id: str = "default",
     ) -> AssistantResponse:
         """Persist the user's default region and compartment."""
-        profile = self.repository.get_profile(profile_id)
-        config_fallback = profile.get("config_fallback", {})
-        auth_mode = profile.get("auth_mode", "instance_principal")
         normalized_region = region.strip()
         normalized_name = compartment_name.strip()
         normalized_id = (compartment_id or "").strip() or None
-        available_compartments: list[dict[str, Any]] | None = None
-        tenancy_id: str | None = None
+        if not normalized_region or not normalized_name:
+            clarifications: list[ClarificationQuestion] = []
+            if not normalized_region:
+                clarifications.append(
+                    ClarificationQuestion(
+                        id="region",
+                        question="What OCI region should I save as the default?",
+                    )
+                )
+            if not normalized_name:
+                clarifications.append(
+                    ClarificationQuestion(
+                        id="compartment_name",
+                        question="What compartment should I save as the default?",
+                    )
+                )
+            return AssistantResponse(
+                status="needs_clarification",
+                interpretation="Default context setup is missing required values.",
+                clarifications=clarifications,
+                summary="I need both a region and a compartment before I can save the default context.",
+            )
+
+        profile = self.repository.get_profile(profile_id)
+        config_fallback = profile.get("config_fallback", {})
+        auth_mode = profile.get("auth_mode", "instance_principal")
         try:
             resolved = self.context_resolver.resolve_compartment(
                 region=normalized_region,
@@ -135,14 +156,55 @@ class MonitoringAssistantService:
             )
             normalized_name = resolved["compartment_name"]
             normalized_id = resolved["compartment_id"]
-            tenancy_id = resolved["tenancy_id"]
             available_compartments = self.context_resolver.list_accessible_compartments(
                 region=normalized_region,
                 auth_mode=auth_mode,
                 config_fallback=config_fallback,
             )["compartments"]
-        except (DependencyMissingError, AuthFallbackSuggestedError, CompartmentResolutionError):
-            pass
+        except DependencyMissingError as exc:
+            return AssistantResponse(
+                status="error",
+                interpretation=(
+                    f"Could not validate default context for region {normalized_region} and "
+                    f"compartment {normalized_name}."
+                ),
+                summary=f"{exc} Default context was not saved.",
+            )
+        except AuthFallbackSuggestedError as exc:
+            return AssistantResponse(
+                status="needs_clarification",
+                interpretation=(
+                    "Could not validate the default context because Instance Principals "
+                    "authentication failed."
+                ),
+                clarifications=[
+                    ClarificationQuestion(
+                        id="auth_fallback",
+                        question=(
+                            "Instance Principals failed while validating the default context. "
+                            f"Do you want to use OCI config fallback from {exc.config_path} "
+                            f"with profile {exc.profile_name}?"
+                        ),
+                    )
+                ],
+                summary=f"{exc} Default context was not saved.",
+            )
+        except CompartmentResolutionError as exc:
+            option_names = [option["name"] for option in exc.options[:10]]
+            question = "What exact compartment name or OCID should I save as the default?"
+            if option_names:
+                question = (
+                    f"{question} Matching options: {', '.join(option_names)}."
+                )
+            return AssistantResponse(
+                status="needs_clarification",
+                interpretation=(
+                    f"Could not safely resolve default compartment {normalized_name} in "
+                    f"region {normalized_region}."
+                ),
+                clarifications=[ClarificationQuestion(id="compartment_name", question=question)],
+                summary=f"{exc} Default context was not saved.",
+            )
 
         profile = self.repository.set_default_context(
             profile_id,
@@ -150,7 +212,7 @@ class MonitoringAssistantService:
             compartment_name=normalized_name,
             compartment_id=normalized_id,
             auth_mode=auth_mode,
-            tenancy_id=tenancy_id,
+            tenancy_id=resolved["tenancy_id"],
             available_compartments=available_compartments,
         )
         return AssistantResponse(
@@ -236,11 +298,29 @@ class MonitoringAssistantService:
                 "summary": "Provide a region or save a default region first.",
                 "compartments": [],
             }
-        listing = self.context_resolver.list_accessible_compartments(
-            region=resolved_region,
-            auth_mode=profile.get("auth_mode", "instance_principal"),
-            config_fallback=profile.get("config_fallback", {}),
-        )
+        try:
+            listing = self.context_resolver.list_accessible_compartments(
+                region=resolved_region,
+                auth_mode=profile.get("auth_mode", "instance_principal"),
+                config_fallback=profile.get("config_fallback", {}),
+            )
+        except AuthFallbackSuggestedError as exc:
+            return {
+                "status": "needs_clarification",
+                "summary": str(exc),
+                "question": (
+                    "Instance Principals failed while listing accessible compartments. "
+                    f"Switch to OCI config fallback from {exc.config_path} "
+                    f"with profile {exc.profile_name} if needed."
+                ),
+                "compartments": [],
+            }
+        except DependencyMissingError as exc:
+            return {
+                "status": "error",
+                "summary": str(exc),
+                "compartments": [],
+            }
         profile["available_compartments"] = listing["compartments"]
         profile["tenancy_id"] = listing["tenancy_id"]
         self.repository.update_profile(profile_id, profile)
@@ -1067,7 +1147,7 @@ class MonitoringAssistantService:
         summary_text = result.summary
         if len(result.rows) > DEFAULT_TABLE_LIMIT and csv_artifact is not None:
             summary_text += (
-                " Showing up to 10 results; download the full result set as CSV from artifacts."
+                f" Showing up to {DEFAULT_TABLE_LIMIT} results; download the full result set as CSV from artifacts."
             )
 
         return AssistantResponse(
@@ -1486,15 +1566,38 @@ class MonitoringAssistantService:
     def _extract_time_range(self, text: str) -> str | None:
         mapping = {
             "last 15 minutes": "15m",
+            "past 15 minutes": "15m",
+            "last 15 mins": "15m",
             "last 30 minutes": "30m",
+            "past 30 minutes": "30m",
+            "last 30 mins": "30m",
             "last 1 hour": "1h",
+            "past 1 hour": "1h",
             "last hour": "1h",
+            "past hour": "1h",
             "last 6 hours": "6h",
+            "past 6 hours": "6h",
             "last 24 hours": "24h",
+            "past 24 hours": "24h",
+            "last day": "24h",
+            "past day": "24h",
             "last 7 days": "7d",
+            "past 7 days": "7d",
+            "last week": "7d",
         }
         for phrase, value in mapping.items():
             if phrase in text:
+                return value
+        compact_mapping = {
+            "15m": "15m",
+            "30m": "30m",
+            "1h": "1h",
+            "6h": "6h",
+            "24h": "24h",
+            "7d": "7d",
+        }
+        for phrase, value in compact_mapping.items():
+            if re.search(rf"\b(?:last|past)?\s*{re.escape(phrase)}\b", text):
                 return value
         return None
 
@@ -1524,7 +1627,12 @@ class MonitoringAssistantService:
         )
 
     def _extract_instance_name(self, text: str) -> str | None:
-        match = re.search(r"(?:trend for|trend of)\s+(.+)$", text, re.IGNORECASE)
+        match = re.search(
+            r"(?:trend for|trend of)\s+(.+?)(?=\s+(?:for|over|during|across|within|"
+            r"in\s+the\s+last|last|in\s+compartment|from\s+compartment|compartment\b)\b|[?.!,]|$)",
+            text,
+            re.IGNORECASE,
+        )
         if not match:
             return None
         return match.group(1).strip().strip('"').strip("'")

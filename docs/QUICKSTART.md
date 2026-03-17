@@ -91,7 +91,7 @@ export OCI_MON_MCP_ARTIFACT_PORT=8765
 export MPLCONFIGDIR=/tmp/matplotlib
 # Optional: suppress expected noisy /mcp probe access logs (404/400).
 export OCI_MON_MCP_SUPPRESS_EXPECTED_MCP_PROBE_LOGS=1
-# Optional: location for mutable per-user state files (memory/templates).
+# Optional: location for shared VM runtime state (templates/shared learnings/profile memory).
 # Defaults to <repo>/data/runtime
 export OCI_MON_MCP_STATE_DIR=/home/opc/oci-mon-mcp-server/data/runtime
 ```
@@ -227,9 +227,11 @@ The prototype exposes these tools:
 
 ## 8.1 Result Shape Defaults
 - Queries return a short summary, then a table, then chart/artifacts.
-- By default, the table shows the top 10 rows.
+- By default, the table shows the top 20 rows.
 - By default, the chart shows the top 10 series.
-- If more than 10 rows are returned, a CSV artifact is generated for the full export.
+- If more than 20 rows are returned, a CSV artifact is generated for the full export.
+- If no compute instances cross a threshold query, the response still shows the top 5 highest
+  instances in that window and names the highest observed value, instance, and time.
 - For tenancy-wide queries, rows include `compartment` and `lifecycle_state` from Compute metadata
   when available.
 
@@ -237,7 +239,9 @@ The prototype exposes these tools:
 - The repo ships generic starter templates in `data/seed_query_templates.json`.
 - The repo ships generic starter memory in `data/seed_user_memory.json`.
 - At first startup, runtime state is created under `data/runtime/` (or `OCI_MON_MCP_STATE_DIR`).
-- Runtime files are user/environment-specific and should not be committed.
+- Runtime files are shared by the VM-hosted server and should not be committed.
+- Successful query templates are shared across users on the VM.
+- High-confidence learned preferences are saved at both profile scope and shared VM scope.
 
 ### Promote generic learnings safely
 To promote runtime learnings back into generic seed files:
@@ -261,7 +265,7 @@ Formatting rules:
 - Keep exactly these 6 columns, in this order.
 - Use 2 decimal places for `Max CPU %` and `Latest CPU %`.
 - Keep `Time of Max (UTC)` in ISO-8601 UTC format.
-- Show top 10 rows in the table; include CSV artifact for full row set.
+- Show top 20 rows in the table; include CSV artifact for full row set.
 
 ## 9. First Test Sequence
 
@@ -303,8 +307,10 @@ Formatting rules:
 
 ## 12. Data Files
 The prototype persists local state under `data/`:
-- `data/user_memory.json` for defaults, learned preferences, and pending clarification state
-- `data/query_templates.json` for successful NL-to-query templates
+- `data/runtime/user_memory.json` for defaults, learned preferences, pending clarification state,
+  and shared VM-wide preferences
+- `data/runtime/query_templates.json` for successful NL-to-query templates shared across users on
+  the VM
 - `data/artifacts/` for generated PNG and CSV files
 
 ## 13. Operational Notes

@@ -19,6 +19,8 @@ TIME_RANGE_TO_DELTA: dict[str, timedelta] = {
     "7d": timedelta(days=7),
 }
 
+THRESHOLD_NO_MATCH_LIMIT = 5
+
 
 class OciSdkExecutionAdapter:
     """Execute Monitoring queries through the OCI Python SDK."""
@@ -144,7 +146,12 @@ class OciSdkExecutionAdapter:
             threshold_value = float(request.parsed_query.threshold or 0)
             matched = [row for row in rows if row.get("aggregated_value", 0.0) > threshold_value]
             if not matched:
-                highest = rows[0] if rows else None
+                highest = max(rows, key=lambda row: row.get("aggregated_value", 0.0), default=None)
+                top_rows = sorted(
+                    rows,
+                    key=lambda row: row.get("aggregated_value", 0.0),
+                    reverse=True,
+                )[:THRESHOLD_NO_MATCH_LIMIT]
                 if highest is None:
                     summary = (
                         f"No recent {metric_label} datapoints were found in {request.compartment_name}."
@@ -159,11 +166,18 @@ class OciSdkExecutionAdapter:
                     )
                 return ExecutionResult(
                     summary=summary,
-                    rows=rows,
-                    chart_series=chart_series,
+                    rows=top_rows,
+                    chart_series=self._filter_chart_series(
+                        chart_series,
+                        instance_names={row.get("instance_name") for row in top_rows},
+                    )[:THRESHOLD_NO_MATCH_LIMIT],
                     no_match_highest=highest,
                 )
             rows = matched
+            chart_series = self._filter_chart_series(
+                chart_series,
+                instance_names={row.get("instance_name") for row in matched},
+            )
 
         if request.parsed_query.top_n:
             rows = rows[: request.parsed_query.top_n]
@@ -353,6 +367,17 @@ class OciSdkExecutionAdapter:
         chart_candidates.sort(key=lambda item: item[0], reverse=True)
         chart_series = [series for _, series in chart_candidates]
         return rows, chart_series
+
+    def _filter_chart_series(
+        self,
+        chart_series: list[ChartSeries],
+        *,
+        instance_names: set[Any],
+    ) -> list[ChartSeries]:
+        normalized_names = {str(name) for name in instance_names if name}
+        if not normalized_names:
+            return []
+        return [series for series in chart_series if series.name in normalized_names]
 
     def _compute_metric_stats(
         self,

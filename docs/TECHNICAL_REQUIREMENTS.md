@@ -475,11 +475,20 @@ If confidence is weak, use generic recommendations.
 Persist a JSON file for context and learned clarifications.
 
 Suggested path:
-- `data/user_memory.json`
+- `data/runtime/user_memory.json`
 
 Suggested shape:
 ```json
 {
+  "shared_preferences": [
+    {
+      "intent_key": "worst_performing_compute_instances",
+      "resolved_metric": "cpu",
+      "confidence": 0.92,
+      "last_used_at": "2026-03-16T10:00:00Z",
+      "usage_count": 4
+    }
+  ],
   "profiles": {
     "rishabh": {
       "tenancy_id": "ocid1.tenancy...",
@@ -496,7 +505,8 @@ Suggested shape:
           "intent_key": "worst_performing_compute_instances",
           "resolved_metric": "cpu",
           "confidence": 0.9,
-          "last_used_at": "2026-03-16T10:00:00Z"
+          "last_used_at": "2026-03-16T10:00:00Z",
+          "usage_count": 2
         }
       ]
     }
@@ -508,12 +518,13 @@ Scope this store by:
 - tenancy
 - region
 - user profile
+- plus shared VM-wide preferences reused across profiles
 
 ### 14.2 Query Template Store
 Persist a separate JSON file for successful templates.
 
 Suggested existing path:
-- `data/query_templates.json`
+- `data/runtime/query_templates.json`
 
 Suggested shape:
 ```json
