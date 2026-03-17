@@ -67,6 +67,7 @@ class OciSdkExecutionAdapter:
             }
         )
 
+        include_subtree_for_monitoring = request.include_subcompartments
         for query_text in request.query_text.splitlines():
             metric_name = query_text.split("[", 1)[0]
             details = oci.monitoring.models.SummarizeMetricsDataDetails(
@@ -80,9 +81,17 @@ class OciSdkExecutionAdapter:
                 "compartment_id": request.compartment_id,
                 "summarize_metrics_data_details": details,
             }
-            if request.include_subcompartments:
+            if include_subtree_for_monitoring:
                 summarize_kwargs["compartment_id_in_subtree"] = True
-            response = session.monitoring_client.summarize_metrics_data(**summarize_kwargs)
+            try:
+                response = session.monitoring_client.summarize_metrics_data(**summarize_kwargs)
+            except Exception as exc:
+                if include_subtree_for_monitoring and self._is_non_tenancy_subtree_error(exc):
+                    include_subtree_for_monitoring = False
+                    summarize_kwargs.pop("compartment_id_in_subtree", None)
+                    response = session.monitoring_client.summarize_metrics_data(**summarize_kwargs)
+                else:
+                    raise
             for metric_data in response.data:
                 dimensions = metric_data.dimensions or {}
                 resource_id = dimensions.get("resourceId") or dimensions.get("resourceDisplayName")
@@ -169,6 +178,15 @@ class OciSdkExecutionAdapter:
                 f"{request.compartment_name} over the last {request.parsed_query.time_range}."
             )
         return ExecutionResult(summary=summary, rows=rows, chart_series=chart_series)
+
+    def _is_non_tenancy_subtree_error(self, exc: Exception) -> bool:
+        message = str(exc)
+        if "compartmentIdInSubtree" not in message:
+            return False
+        if "non-tenancy compartment" in message:
+            return True
+        code = getattr(exc, "code", None)
+        return code == "InvalidParameter"
 
     def _list_instances(
         self,

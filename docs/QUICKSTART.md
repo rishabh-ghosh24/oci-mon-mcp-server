@@ -239,6 +239,17 @@ The prototype exposes these tools:
 - At first startup, runtime state is created under `data/runtime/` (or `OCI_MON_MCP_STATE_DIR`).
 - Runtime files are user/environment-specific and should not be committed.
 
+### Promote generic learnings safely
+To promote runtime learnings back into generic seed files:
+
+```bash
+python3 scripts/promote_seeds.py --dry-run
+python3 scripts/promote_seeds.py
+```
+
+The promotion script is conservative and skips entries that contain likely sensitive data
+(for example OCIDs, IP addresses, emails, or secret-like tokens).
+
 ### Response table format (standard)
 Use this exact table schema and order in user-facing responses for CPU utilization queries:
 

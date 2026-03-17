@@ -48,3 +48,16 @@ MCP server that connects AI assistants to OCI Monitoring service. Query, analyze
 ## Run
 See `docs/QUICKSTART.md` for the VM runbook and first test sequence.
 See `docs/CLIENT_SETUP.md` for Codex, Claude, and ChatGPT client setup.
+
+## Seed Promotion Workflow
+To promote useful generic learnings from local runtime state into repo seed files:
+
+```bash
+python3 scripts/promote_seeds.py --dry-run
+python3 scripts/promote_seeds.py
+```
+
+Notes:
+- Runtime files are read from `data/runtime/` by default.
+- Promotion intentionally strips tenancy/user-specific values (OCIDs, IPs, emails, secret-like text).
+- Review diffs before committing.
