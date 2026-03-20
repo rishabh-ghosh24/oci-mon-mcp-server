@@ -172,22 +172,16 @@ class MonitoringAssistantService:
             )
         except AuthFallbackSuggestedError as exc:
             return AssistantResponse(
-                status="needs_clarification",
+                status="error",
                 interpretation=(
                     "Could not validate the default context because Instance Principals "
                     "authentication failed."
                 ),
-                clarifications=[
-                    ClarificationQuestion(
-                        id="auth_fallback",
-                        question=(
-                            "Instance Principals failed while validating the default context. "
-                            f"Do you want to use OCI config fallback from {exc.config_path} "
-                            f"with profile {exc.profile_name}?"
-                        ),
-                    )
-                ],
-                summary=f"{exc} Default context was not saved.",
+                summary=(
+                    "Instance Principals authentication failed while validating the default "
+                    f"context. {exc} Default context was not saved. If you want OCI config "
+                    "fallback, explicitly run configure_auth_fallback."
+                ),
             )
         except CompartmentResolutionError as exc:
             option_names = [option["name"] for option in exc.options[:10]]
@@ -316,12 +310,11 @@ class MonitoringAssistantService:
             )
         except AuthFallbackSuggestedError as exc:
             return {
-                "status": "needs_clarification",
-                "summary": str(exc),
-                "question": (
+                "status": "error",
+                "summary": (
                     "Instance Principals failed while listing accessible compartments. "
-                    f"Switch to OCI config fallback from {exc.config_path} "
-                    f"with profile {exc.profile_name} if needed."
+                    f"{exc} If you want OCI config fallback, explicitly run "
+                    "configure_auth_fallback."
                 ),
                 "compartments": [],
             }
@@ -1021,30 +1014,17 @@ class MonitoringAssistantService:
             )
             result = self.execution_adapter.execute(request)
         except AuthFallbackSuggestedError as exc:
-            pending = {
-                "kind": "auth_fallback",
-                "created_at": utc_now_iso(),
-                "original_query": parsed.source_query,
-                "questions": [
-                    {
-                        "id": "auth_fallback",
-                        "question": (
-                            "Instance Principals failed. Switch to OCI config fallback using "
-                            f"{exc.config_path} and profile {exc.profile_name}? Reply yes or "
-                            "provide a config path/profile."
-                        ),
-                    }
-                ],
-            }
-            self.repository.set_pending_clarification(profile_id, pending)
             return AssistantResponse(
-                status="needs_clarification",
+                status="error",
                 interpretation=self._interpretation_line(
                     parsed,
                     scope_label=scope["scope_label"],
                 ),
-                clarifications=[ClarificationQuestion(**pending["questions"][0])],
-                summary=str(exc),
+                summary=(
+                    "Instance Principals authentication failed while executing this query. "
+                    f"{exc} If you want OCI config fallback, explicitly run "
+                    "configure_auth_fallback."
+                ),
             )
         except InstanceResolutionError as exc:
             pending = {

@@ -373,7 +373,7 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         self.assertEqual(listing["status"], "needs_clarification")
         self.assertIn("not configured yet", listing["summary"].lower())
 
-    def test_auth_fallback_prompt_is_returned_when_instance_principals_fail(self) -> None:
+    def test_instance_principal_failure_returns_error_without_auto_fallback_prompt(self) -> None:
         repository = JsonRepository(data_dir=Path(self.tempdir.name) / "fallback")
         service = MonitoringAssistantService(
             repository=repository,
@@ -392,8 +392,9 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         response = service.handle_query(
             "show me all compute instances with CPU utilization above 80% in the last 1 hour"
         )
-        self.assertEqual(response.status, "needs_clarification")
-        self.assertEqual(response.clarifications[0].id, "auth_fallback")
+        self.assertEqual(response.status, "error")
+        self.assertEqual(response.clarifications, [])
+        self.assertIn("explicitly run configure_auth_fallback", response.summary.lower())
 
     def test_large_result_generates_csv_artifact(self) -> None:
         class ManyRowsAdapter(FakeExecutionAdapter):
