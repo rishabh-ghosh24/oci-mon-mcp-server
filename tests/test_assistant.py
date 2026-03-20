@@ -23,7 +23,7 @@ from oci_mon_mcp.models import (
     QueryExecutionRequest,
 )
 from oci_mon_mcp.oci_support import OciContextResolver
-from oci_mon_mcp.repository import JsonRepository
+from oci_mon_mcp.repository import JsonRepository, RepositoryFactory
 
 
 class FakeExecutionAdapter(MonitoringExecutionAdapter):
@@ -438,7 +438,7 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         self.assertIn("app-01", response.interpretation)
         self.assertNotIn("in the last 1 hour", response.interpretation)
 
-    def test_shared_preference_is_available_across_profiles(self) -> None:
+    def test_preference_is_scoped_to_profile_until_promoted(self) -> None:
         repository = JsonRepository(data_dir=Path(self.tempdir.name) / "shared-preferences")
 
         repository.remember_preference(
@@ -447,11 +447,35 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
             resolved_metric="memory",
         )
 
+        personal = repository.get_preference("alice", "worst_performing_compute_instances")
+        missing = repository.get_preference("bob", "worst_performing_compute_instances")
+
+        self.assertIsNotNone(personal)
+        assert personal is not None
+        self.assertEqual(personal["resolved_metric"], "memory")
+        self.assertEqual(personal["scope"], "profile")
+        self.assertIsNone(missing)
+
+    def test_shared_preference_falls_back_from_shared_store(self) -> None:
+        factory = RepositoryFactory(data_dir=Path(self.tempdir.name) / "shared-store")
+        factory.shared.write_shared_preferences(
+            [
+                {
+                    "intent_key": "worst_performing_compute_instances",
+                    "resolved_metric": "cpu",
+                    "confidence": 0.8,
+                    "usage_count": 3,
+                    "last_used_at": "2026-03-16T00:00:00+00:00",
+                }
+            ]
+        )
+        repository = JsonRepository(factory=factory)
+
         shared = repository.get_preference("bob", "worst_performing_compute_instances")
 
         self.assertIsNotNone(shared)
         assert shared is not None
-        self.assertEqual(shared["resolved_metric"], "memory")
+        self.assertEqual(shared["resolved_metric"], "cpu")
         self.assertEqual(shared["scope"], "shared")
 
 

@@ -11,29 +11,17 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sanitize_utils import sanitize_pattern, sanitize_query_text
+
 
 ALLOWED_METRICS = {"cpu", "memory", "disk_io_throughput", "disk_io_iops"}
 ALLOWED_INTENTS = {"threshold", "top_n", "worst_performing", "named_trend"}
 ALLOWED_AGGREGATIONS = {"max", "mean", "avg", "sum"}
-
-OCID_RE = re.compile(r"ocid1\.[A-Za-z0-9_.-]+")
-IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
-SECRETISH_RE = re.compile(
-    r"(?:api[_-]?key|secret|password|token|bearer|authorization)",
-    re.IGNORECASE,
-)
-UUID_RE = re.compile(
-    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
-    re.IGNORECASE,
-)
-LONG_HEX_RE = re.compile(r"\b[a-f0-9]{24,}\b", re.IGNORECASE)
 
 
 def now_iso() -> str:
@@ -52,38 +40,6 @@ def write_json(path: Path, payload: Any) -> None:
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=False)
         handle.write("\n")
-
-
-def looks_sensitive(text: str) -> bool:
-    return any(
-        pattern.search(text)
-        for pattern in (OCID_RE, IPV4_RE, EMAIL_RE, SECRETISH_RE, UUID_RE, LONG_HEX_RE)
-    )
-
-
-def sanitize_pattern(text: str) -> str | None:
-    candidate = text.strip()
-    if not candidate:
-        return None
-    if looks_sensitive(candidate):
-        return None
-    # Strip over-specific quoted literals.
-    candidate = re.sub(r'"[^"]{32,}"', '"<value>"', candidate)
-    candidate = re.sub(r"'[^']{32,}'", "'<value>'", candidate)
-    return candidate
-
-
-def sanitize_query_text(query_text: str) -> str | None:
-    if not query_text:
-        return None
-    cleaned = OCID_RE.sub("<resource_ocid>", query_text)
-    cleaned = IPV4_RE.sub("<ip_address>", cleaned)
-    cleaned = EMAIL_RE.sub("<email>", cleaned)
-    cleaned = UUID_RE.sub("<uuid>", cleaned)
-    cleaned = LONG_HEX_RE.sub("<id>", cleaned)
-    if SECRETISH_RE.search(cleaned):
-        return None
-    return cleaned
 
 
 def normalize_template(template: dict[str, Any], index: int) -> dict[str, Any] | None:

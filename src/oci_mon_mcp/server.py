@@ -9,6 +9,13 @@ import sys
 from typing import Any
 
 from .assistant import MonitoringAssistantService
+from .identity import (
+    RequestIdentity,
+    get_current_identity,
+    reset_current_identity,
+    set_current_identity,
+)
+from .repository import JsonRepository, RepositoryFactory
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -16,7 +23,8 @@ except ImportError:  # pragma: no cover - exercised by import fallback tests ins
     FastMCP = None  # type: ignore[assignment]
 
 
-SERVICE = MonitoringAssistantService()
+REPOSITORY_FACTORY = RepositoryFactory()
+SERVICE = MonitoringAssistantService(repository=JsonRepository(factory=REPOSITORY_FACTORY))
 
 
 class _ExpectedMcpAccessFilter(logging.Filter):
@@ -34,12 +42,94 @@ class _ExpectedMcpAccessFilter(logging.Filter):
         return not any(pattern in message for pattern in expected_patterns)
 
 
+class IdentityMiddleware:
+    """Resolve pilot user identity from the MCP URL token."""
+
+    def __init__(self, app: Any, *, repository_factory: RepositoryFactory, streamable_path: str) -> None:
+        self.app = app
+        self.repository_factory = repository_factory
+        self.streamable_path = streamable_path.rstrip("/") or "/"
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = str(scope.get("path", "")) or "/"
+        if not self._is_streamable_request(path):
+            await self.app(scope, receive, send)
+            return
+
+        token_value = self._query_value(scope, "u")
+        record = self.repository_factory.resolve_token(token_value)
+        require_token = os.getenv("OCI_MON_MCP_REQUIRE_TOKEN", "0") == "1"
+        if require_token and record is None:
+            await self._send_json(send, 401, {"error": "Missing or invalid MCP user token."})
+            return
+
+        identity_token = None
+        if record is not None:
+            identity_token = set_current_identity(
+                RequestIdentity(
+                    profile_id=str(record["profile_id"]),
+                    user_id=str(record["user_id"]),
+                    token=token_value,
+                    client_type=str(record.get("client_type", "")) or None,
+                )
+            )
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            if identity_token is not None:
+                reset_current_identity(identity_token)
+
+    def _is_streamable_request(self, path: str) -> bool:
+        normalized = path.rstrip("/") or "/"
+        return normalized == self.streamable_path
+
+    @staticmethod
+    def _query_value(scope: dict[str, Any], key: str) -> str | None:
+        raw = scope.get("query_string", b"")
+        if not raw:
+            return None
+        from urllib.parse import parse_qs
+
+        parsed = parse_qs(raw.decode("utf-8", errors="ignore"), keep_blank_values=True)
+        values = parsed.get(key)
+        if not values:
+            return None
+        return values[0] or None
+
+    @staticmethod
+    async def _send_json(send: Any, status_code: int, payload: dict[str, Any]) -> None:
+        body = (
+            "{\n"
+            + f'  "error": "{payload.get("error", "Unauthorized")}"\n'
+            + "}\n"
+        ).encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": status_code,
+                "headers": [(b"content-type", b"application/json")],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
+
+
 def _configure_access_log_filter() -> None:
     """Suppress expected MCP probe noise so operator logs stay actionable."""
     if os.getenv("OCI_MON_MCP_SUPPRESS_EXPECTED_MCP_PROBE_LOGS", "1") != "1":
         return
     logger = logging.getLogger("uvicorn.access")
     logger.addFilter(_ExpectedMcpAccessFilter())
+
+
+def _effective_profile_id(profile_id: str) -> str:
+    current = get_current_identity()
+    if current is not None:
+        return current.profile_id
+    return profile_id
 
 
 def create_mcp_server() -> Any:
@@ -91,7 +181,7 @@ def create_mcp_server() -> Any:
     @mcp.tool()
     def monitoring_assistant(query: str, profile_id: str = "default"):
         """Interpret a monitoring question and return a structured response."""
-        return asdict(SERVICE.handle_query(query=query, profile_id=profile_id))
+        return asdict(SERVICE.handle_query(query=query, profile_id=_effective_profile_id(profile_id)))
 
     @mcp.tool()
     def setup_default_context(
@@ -106,7 +196,7 @@ def create_mcp_server() -> Any:
                 region=region,
                 compartment_name=compartment_name,
                 compartment_id=compartment_id or None,
-                profile_id=profile_id,
+                profile_id=_effective_profile_id(profile_id),
             )
         )
 
@@ -123,19 +213,22 @@ def create_mcp_server() -> Any:
                 region=region or None,
                 compartment_name=compartment_name or None,
                 compartment_id=compartment_id or None,
-                profile_id=profile_id,
+                profile_id=_effective_profile_id(profile_id),
             )
         )
 
     @mcp.tool()
     def list_saved_templates(profile_id: str = "default"):
         """List successful saved query templates for the current profile scope."""
-        return SERVICE.list_saved_templates(profile_id=profile_id)
+        return SERVICE.list_saved_templates(profile_id=_effective_profile_id(profile_id))
 
     @mcp.tool()
     def discover_accessible_compartments(region: str = "", profile_id: str = "default"):
         """List accessible compartments for the current auth mode."""
-        return SERVICE.discover_accessible_compartments(region=region, profile_id=profile_id)
+        return SERVICE.discover_accessible_compartments(
+            region=region,
+            profile_id=_effective_profile_id(profile_id),
+        )
 
     @mcp.tool()
     def configure_auth_fallback(
@@ -148,16 +241,46 @@ def create_mcp_server() -> Any:
             SERVICE.configure_auth_fallback(
                 config_path=config_path,
                 profile_name=profile_name,
-                profile_id=profile_id,
+                profile_id=_effective_profile_id(profile_id),
             )
         )
 
     @mcp.tool()
     def use_instance_principals(profile_id: str = "default"):
         """Switch the profile back to Instance Principals auth."""
-        return asdict(SERVICE.use_instance_principals(profile_id=profile_id))
+        return asdict(SERVICE.use_instance_principals(profile_id=_effective_profile_id(profile_id)))
 
     return mcp
+
+
+def create_streamable_http_app(
+    mcp: Any | None = None,
+    repository_factory: RepositoryFactory | None = None,
+) -> Any:
+    """Build the streamable HTTP app with token-aware identity middleware."""
+    server = mcp or create_mcp_server()
+    if server is None:
+        return None
+    app = server.streamable_http_app()
+    app.add_middleware(
+        IdentityMiddleware,
+        repository_factory=repository_factory or REPOSITORY_FACTORY,
+        streamable_path=os.getenv("OCI_MON_MCP_STREAMABLE_HTTP_PATH", "/mcp"),
+    )
+    return app
+
+
+async def _serve_streamable_http(server: Any, app: Any) -> None:
+    import uvicorn
+
+    config = uvicorn.Config(
+        app,
+        host=server.settings.host,
+        port=server.settings.port,
+        log_level=server.settings.log_level.lower(),
+    )
+    http_server = uvicorn.Server(config)
+    await http_server.serve()
 
 
 def main() -> None:
@@ -174,6 +297,12 @@ def main() -> None:
 
     transport = os.getenv("OCI_MON_MCP_TRANSPORT", "streamable-http")
     try:
+        if transport == "streamable-http":
+            import anyio
+
+            app = create_streamable_http_app(server, repository_factory=REPOSITORY_FACTORY)
+            anyio.run(_serve_streamable_http, server, app)
+            return
         server.run(transport=transport)
     except KeyboardInterrupt:
         return
