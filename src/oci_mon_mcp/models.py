@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 
 ResponseStatus = Literal["success", "needs_clarification", "error"]
@@ -104,6 +104,38 @@ class AssistantResponse:
     recommendations: list[str] = field(default_factory=list)
     artifacts: list[ArtifactLink] = field(default_factory=list)
     details: AssistantDetails = field(default_factory=AssistantDetails)
+
+
+class AssistantToolResponse(TypedDict):
+    """Structured monitoring assistant tool response."""
+
+    status: str
+    interpretation: str
+    clarifications: list[dict[str, Any]]
+    summary: str
+    tables: list[dict[str, Any]]
+    charts: list[dict[str, Any]]
+    recommendations: list[str]
+    artifacts: list[dict[str, Any]]
+    details: dict[str, Any]
+
+
+class TemplateListingResponse(TypedDict):
+    """Structured template listing response."""
+
+    profile_id: str
+    count: int
+    templates: list[dict[str, Any]]
+
+
+class CompartmentDiscoveryResponse(TypedDict, total=False):
+    """Structured compartment discovery response."""
+
+    status: str
+    summary: str
+    question: str
+    count: int
+    compartments: list[dict[str, Any]]
 
 
 @dataclass(slots=True)

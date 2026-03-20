@@ -147,6 +147,14 @@ class _FakeService:
 
 
 class ServerIdentityTests(unittest.TestCase):
+    def test_monitoring_assistant_tool_exposes_structured_output_schema(self) -> None:
+        mcp = create_mcp_server()
+        tool = next(tool for tool in mcp._tool_manager.list_tools() if tool.name == "monitoring_assistant")
+        self.assertIsNotNone(tool.output_schema)
+        assert tool.output_schema is not None
+        self.assertIn("tables", tool.output_schema["properties"])
+        self.assertIn("charts", tool.output_schema["properties"])
+
     def test_all_tools_use_identity_profile_when_present(self) -> None:
         fake_service = _FakeService()
         with patch("oci_mon_mcp.server.SERVICE", fake_service):

@@ -15,7 +15,13 @@ from .identity import (
     reset_current_identity,
     set_current_identity,
 )
-from .models import AssistantResponse, ClarificationQuestion
+from .models import (
+    AssistantResponse,
+    AssistantToolResponse,
+    ClarificationQuestion,
+    CompartmentDiscoveryResponse,
+    TemplateListingResponse,
+)
 from .repository import JsonRepository, RepositoryFactory
 
 try:
@@ -221,7 +227,7 @@ def create_mcp_server() -> Any:
             )
 
     @mcp.tool()
-    def monitoring_assistant(query: str, profile_id: str = "default"):
+    def monitoring_assistant(query: str, profile_id: str = "default") -> AssistantToolResponse:
         """Interpret a monitoring question and return a structured response."""
         return asdict(SERVICE.handle_query(query=query, profile_id=_effective_profile_id(profile_id)))
 
@@ -231,7 +237,7 @@ def create_mcp_server() -> Any:
         compartment_name: str,
         compartment_id: str = "",
         profile_id: str = "default",
-    ):
+    ) -> AssistantToolResponse:
         """Persist the default region and compartment for a user profile."""
         blocked = _direct_initial_setup_guard(
             profile_id,
@@ -256,7 +262,7 @@ def create_mcp_server() -> Any:
         compartment_name: str = "",
         compartment_id: str = "",
         profile_id: str = "default",
-    ):
+    ) -> AssistantToolResponse:
         """Update the stored default region and/or compartment."""
         blocked = _direct_initial_setup_guard(profile_id)
         if blocked is not None:
@@ -271,12 +277,15 @@ def create_mcp_server() -> Any:
         )
 
     @mcp.tool()
-    def list_saved_templates(profile_id: str = "default"):
+    def list_saved_templates(profile_id: str = "default") -> TemplateListingResponse:
         """List successful saved query templates for the current profile scope."""
         return SERVICE.list_saved_templates(profile_id=_effective_profile_id(profile_id))
 
     @mcp.tool()
-    def discover_accessible_compartments(region: str = "", profile_id: str = "default"):
+    def discover_accessible_compartments(
+        region: str = "",
+        profile_id: str = "default",
+    ) -> CompartmentDiscoveryResponse:
         """List accessible compartments for the current auth mode."""
         return SERVICE.discover_accessible_compartments(
             region=region,
@@ -288,7 +297,7 @@ def create_mcp_server() -> Any:
         config_path: str = "~/.oci/config",
         profile_name: str = "DEFAULT",
         profile_id: str = "default",
-    ):
+    ) -> AssistantToolResponse:
         """Persist OCI config fallback settings for this profile."""
         return asdict(
             SERVICE.configure_auth_fallback(
@@ -299,7 +308,7 @@ def create_mcp_server() -> Any:
         )
 
     @mcp.tool()
-    def use_instance_principals(profile_id: str = "default"):
+    def use_instance_principals(profile_id: str = "default") -> AssistantToolResponse:
         """Switch the profile back to Instance Principals auth."""
         return asdict(SERVICE.use_instance_principals(profile_id=_effective_profile_id(profile_id)))
 
