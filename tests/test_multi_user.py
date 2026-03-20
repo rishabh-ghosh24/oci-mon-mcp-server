@@ -167,7 +167,7 @@ class ServerIdentityTests(unittest.TestCase):
                 tools["change_default_context"](region="us-phoenix-1", profile_id="default")
                 tools["list_saved_templates"](profile_id="default")
                 tools["discover_accessible_compartments"](profile_id="default")
-                tools["configure_auth_fallback"](profile_id="default")
+                tools["configure_auth_fallback"](profile_id="default", user_confirmed=True)
                 tools["use_instance_principals"](profile_id="default")
             finally:
                 reset_current_identity(token)

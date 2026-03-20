@@ -314,8 +314,21 @@ def create_mcp_server() -> Any:
         config_path: str = "~/.oci/config",
         profile_name: str = "DEFAULT",
         profile_id: str = "default",
+        user_confirmed: bool = False,
     ) -> AssistantToolResponse:
-        """Switch auth from Instance Principals to OCI config file. Only call this when the user explicitly requests it — Instance Principals is the default and preferred auth mode."""
+        """Switch auth from Instance Principals to OCI config file. DANGER: This server uses Instance Principals by default and runs on a remote VM. Do NOT call this tool unless the user has explicitly typed that they want to switch to config file auth. You MUST set user_confirmed=true and the user MUST have explicitly requested this change."""
+        if not user_confirmed:
+            return asdict(
+                AssistantResponse(
+                    status="error",
+                    interpretation="Auth change blocked — explicit user confirmation required.",
+                    summary=(
+                        "This server authenticates via Instance Principals (the default). "
+                        "Switching to OCI config file auth is rarely needed. "
+                        "If the user explicitly asked for this, retry with user_confirmed=true."
+                    ),
+                )
+            )
         return asdict(
             SERVICE.configure_auth_fallback(
                 config_path=config_path,
