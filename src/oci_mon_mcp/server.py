@@ -15,6 +15,7 @@ from .identity import (
     reset_current_identity,
     set_current_identity,
 )
+from .models import AssistantResponse, ClarificationQuestion
 from .repository import JsonRepository, RepositoryFactory
 
 try:
@@ -132,6 +133,36 @@ def _effective_profile_id(profile_id: str) -> str:
     return profile_id
 
 
+def _direct_initial_setup_guard(profile_id: str) -> dict[str, Any] | None:
+    """Block first-time direct setup tool calls in pilot mode to prevent guessed defaults."""
+    if os.getenv("OCI_MON_MCP_REQUIRE_TOKEN", "0") != "1":
+        return None
+    effective_profile_id = _effective_profile_id(profile_id)
+    profile = SERVICE.repository.get_profile(effective_profile_id)
+    if profile.get("region") or profile.get("default_compartment_name"):
+        return None
+    return asdict(
+        AssistantResponse(
+            status="needs_clarification",
+            interpretation="Default region and compartment are not configured yet.",
+            clarifications=[
+                ClarificationQuestion(
+                    id="region",
+                    question="What OCI region should I save as the default?",
+                ),
+                ClarificationQuestion(
+                    id="compartment_name",
+                    question="What compartment should I save as the default?",
+                ),
+            ],
+            summary=(
+                "Before I save defaults for a new profile, I need the user to explicitly provide "
+                "the region and compartment. Do not infer them."
+            ),
+        )
+    )
+
+
 def create_mcp_server() -> Any:
     """Create the FastMCP server when the dependency is available."""
     if FastMCP is None:
@@ -141,7 +172,8 @@ def create_mcp_server() -> Any:
         "OCI Monitoring MCP",
         instructions=(
             "Use this server to query OCI Monitoring metrics for compute instances. "
-            "Ask clarifying questions before execution when the request is ambiguous."
+            "Ask clarifying questions before execution when the request is ambiguous. "
+            "Never infer a default OCI region or default compartment for a new profile."
         ),
         host=os.getenv("OCI_MON_MCP_HOST", "0.0.0.0"),
         port=int(os.getenv("OCI_MON_MCP_PORT", "8000")),
@@ -191,6 +223,9 @@ def create_mcp_server() -> Any:
         profile_id: str = "default",
     ):
         """Persist the default region and compartment for a user profile."""
+        blocked = _direct_initial_setup_guard(profile_id)
+        if blocked is not None:
+            return blocked
         return asdict(
             SERVICE.setup_default_context(
                 region=region,
@@ -208,6 +243,9 @@ def create_mcp_server() -> Any:
         profile_id: str = "default",
     ):
         """Update the stored default region and/or compartment."""
+        blocked = _direct_initial_setup_guard(profile_id)
+        if blocked is not None:
+            return blocked
         return asdict(
             SERVICE.change_default_context(
                 region=region or None,

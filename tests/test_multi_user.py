@@ -113,8 +113,9 @@ class MultiUserRepositoryTests(unittest.TestCase):
 
 
 class _FakeService:
-    def __init__(self) -> None:
+    def __init__(self, repository: JsonRepository | None = None) -> None:
         self.calls: list[tuple[str, str]] = []
+        self.repository = repository or JsonRepository(factory=RepositoryFactory(data_dir=Path(tempfile.mkdtemp())))
 
     def handle_query(self, *, query: str, profile_id: str) -> AssistantResponse:
         self.calls.append(("monitoring_assistant", profile_id))
@@ -213,6 +214,35 @@ class ServerIdentityTests(unittest.TestCase):
         self.assertEqual(mcp_messages[0]["status"], 401)
         self.assertEqual(health_messages[0]["status"], 200)
         self.assertIn("/healthz", health_calls)
+
+    def test_direct_first_time_setup_tools_are_blocked_in_pilot_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tempdir:
+            repository = JsonRepository(factory=RepositoryFactory(data_dir=Path(tempdir)))
+            fake_service = _FakeService(repository=repository)
+            with patch("oci_mon_mcp.server.SERVICE", fake_service):
+                mcp = create_mcp_server()
+                tools = {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
+                token = set_current_identity(
+                    RequestIdentity(profile_id="pilot_alice_codex", user_id="alice", token="tok")
+                )
+                try:
+                    with patch.dict(os.environ, {"OCI_MON_MCP_REQUIRE_TOKEN": "1"}, clear=False):
+                        setup_response = tools["setup_default_context"](
+                            "ap-mumbai-1",
+                            "rishabh",
+                            profile_id="default",
+                        )
+                        change_response = tools["change_default_context"](
+                            region="ap-mumbai-1",
+                            compartment_name="rishabh",
+                            profile_id="default",
+                        )
+                finally:
+                    reset_current_identity(token)
+
+        self.assertEqual(setup_response["status"], "needs_clarification")
+        self.assertEqual(change_response["status"], "needs_clarification")
+        self.assertEqual(fake_service.calls, [])
 
 
 class ServerLoggingTests(unittest.TestCase):
