@@ -133,13 +133,21 @@ def _effective_profile_id(profile_id: str) -> str:
     return profile_id
 
 
-def _direct_initial_setup_guard(profile_id: str) -> dict[str, Any] | None:
-    """Block first-time direct setup tool calls in pilot mode to prevent guessed defaults."""
+def _direct_initial_setup_guard(
+    profile_id: str,
+    *,
+    allow_explicit_setup: bool = False,
+    region: str | None = None,
+    compartment_name: str | None = None,
+) -> dict[str, Any] | None:
+    """Block ambiguous first-time direct setup tool calls in pilot mode."""
     if os.getenv("OCI_MON_MCP_REQUIRE_TOKEN", "0") != "1":
         return None
     effective_profile_id = _effective_profile_id(profile_id)
     profile = SERVICE.repository.get_profile(effective_profile_id)
     if profile.get("region") or profile.get("default_compartment_name"):
+        return None
+    if allow_explicit_setup and (region or "").strip() and (compartment_name or "").strip():
         return None
     return asdict(
         AssistantResponse(
@@ -179,6 +187,8 @@ def create_mcp_server() -> Any:
         port=int(os.getenv("OCI_MON_MCP_PORT", "8000")),
         mount_path=os.getenv("OCI_MON_MCP_MOUNT_PATH", "/"),
         streamable_http_path=os.getenv("OCI_MON_MCP_STREAMABLE_HTTP_PATH", "/mcp"),
+        json_response=os.getenv("OCI_MON_MCP_JSON_RESPONSE", "1") == "1",
+        stateless_http=os.getenv("OCI_MON_MCP_STATELESS_HTTP", "1") == "1",
     )
     streamable_path = os.getenv("OCI_MON_MCP_STREAMABLE_HTTP_PATH", "/mcp")
 
@@ -223,7 +233,12 @@ def create_mcp_server() -> Any:
         profile_id: str = "default",
     ):
         """Persist the default region and compartment for a user profile."""
-        blocked = _direct_initial_setup_guard(profile_id)
+        blocked = _direct_initial_setup_guard(
+            profile_id,
+            allow_explicit_setup=True,
+            region=region,
+            compartment_name=compartment_name,
+        )
         if blocked is not None:
             return blocked
         return asdict(

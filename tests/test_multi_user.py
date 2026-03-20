@@ -215,7 +215,7 @@ class ServerIdentityTests(unittest.TestCase):
         self.assertEqual(health_messages[0]["status"], 200)
         self.assertIn("/healthz", health_calls)
 
-    def test_direct_first_time_setup_tools_are_blocked_in_pilot_mode(self) -> None:
+    def test_explicit_first_time_setup_is_allowed_but_change_is_blocked_in_pilot_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             repository = JsonRepository(factory=RepositoryFactory(data_dir=Path(tempdir)))
             fake_service = _FakeService(repository=repository)
@@ -240,9 +240,16 @@ class ServerIdentityTests(unittest.TestCase):
                 finally:
                     reset_current_identity(token)
 
-        self.assertEqual(setup_response["status"], "needs_clarification")
+        self.assertEqual(setup_response["status"], "success")
         self.assertEqual(change_response["status"], "needs_clarification")
-        self.assertEqual(fake_service.calls, [])
+        self.assertEqual(fake_service.calls, [("setup_default_context", "pilot_alice_codex")])
+
+    def test_streamable_http_defaults_to_stateless_json_mode(self) -> None:
+        with patch.dict(os.environ, {}, clear=False):
+            mcp = create_mcp_server()
+
+        self.assertTrue(mcp.settings.json_response)
+        self.assertTrue(mcp.settings.stateless_http)
 
 
 class ServerLoggingTests(unittest.TestCase):
