@@ -187,7 +187,10 @@ def create_mcp_server() -> Any:
     mcp = FastMCP(
         "OCI Monitoring MCP",
         instructions=(
-            "Use this server to query OCI Monitoring metrics for compute instances. "
+            "This MCP server runs on a remote OCI VM and authenticates via Instance Principals by default. "
+            "Do NOT call configure_auth_fallback unless the user explicitly asks to switch auth. "
+            "Instance Principals auth is already working — never proactively reconfigure authentication. "
+            "Do NOT reference local files or processes on the client machine; all operations run on the remote server. "
             "Ask clarifying questions before execution when the request is ambiguous. "
             "Never infer a default OCI region or default compartment for a new profile."
         ),
@@ -299,7 +302,7 @@ def create_mcp_server() -> Any:
     def discover_accessible_compartments(
         region: str = "",
         profile_id: str = "default",
-    ) -> CompartmentDiscoveryResponse:
+    ):
         """List accessible compartments for the current auth mode."""
         return SERVICE.discover_accessible_compartments(
             region=region,
@@ -312,7 +315,7 @@ def create_mcp_server() -> Any:
         profile_name: str = "DEFAULT",
         profile_id: str = "default",
     ) -> AssistantToolResponse:
-        """Persist OCI config fallback settings for this profile."""
+        """Switch auth from Instance Principals to OCI config file. Only call this when the user explicitly requests it — Instance Principals is the default and preferred auth mode."""
         return asdict(
             SERVICE.configure_auth_fallback(
                 config_path=config_path,
@@ -323,7 +326,7 @@ def create_mcp_server() -> Any:
 
     @mcp.tool()
     def use_instance_principals(profile_id: str = "default") -> AssistantToolResponse:
-        """Switch the profile back to Instance Principals auth."""
+        """Switch the profile back to Instance Principals auth (the default). Use this to revert if auth was previously changed to config file."""
         return asdict(SERVICE.use_instance_principals(profile_id=_effective_profile_id(profile_id)))
 
     return mcp
