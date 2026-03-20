@@ -26,8 +26,10 @@ from .repository import JsonRepository, RepositoryFactory
 
 try:
     from mcp.server.fastmcp import FastMCP
+    from mcp.server.fastmcp.utilities.types import Image as McpImage
 except ImportError:  # pragma: no cover - exercised by import fallback tests instead
     FastMCP = None  # type: ignore[assignment]
+    McpImage = None  # type: ignore[assignment]
 
 
 REPOSITORY_FACTORY = RepositoryFactory()
@@ -227,9 +229,21 @@ def create_mcp_server() -> Any:
             )
 
     @mcp.tool()
-    def monitoring_assistant(query: str, profile_id: str = "default") -> AssistantToolResponse:
+    def monitoring_assistant(query: str, profile_id: str = "default"):
         """Interpret a monitoring question and return a structured response."""
-        return asdict(SERVICE.handle_query(query=query, profile_id=_effective_profile_id(profile_id)))
+        response = SERVICE.handle_query(query=query, profile_id=_effective_profile_id(profile_id))
+        result: list = [asdict(response)]
+
+        # Embed PNG chart artifacts as inline MCP ImageContent blocks
+        if McpImage is not None:
+            for artifact in response.artifacts:
+                if artifact.type != "image/png":
+                    continue
+                png_path = SERVICE.artifact_manager.base_dir / f"{artifact.id}.png"
+                if png_path.is_file():
+                    result.append(McpImage(path=png_path))
+
+        return result
 
     @mcp.tool()
     def setup_default_context(
