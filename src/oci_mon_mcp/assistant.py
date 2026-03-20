@@ -1184,12 +1184,47 @@ class MonitoringAssistantService:
         for row in visible_rows:
             if not row.get("recommendation"):
                 row["recommendation"] = row_recommendation
+        compact_rows = [self._compact_table_row(parsed, row) for row in visible_rows]
         return TableBlock(
             id=f"{parsed.metric_key}_{parsed.intent}_results",
             title=f"{parsed.metric_label} results",
-            columns=list(visible_rows[0].keys()),
-            rows=visible_rows,
+            columns=list(compact_rows[0].keys()),
+            rows=compact_rows,
         )
+
+    def _compact_table_row(self, parsed: ParsedQuery, row: dict[str, Any]) -> dict[str, Any]:
+        preferred_columns = self._preferred_table_columns(parsed, row)
+        compact = {key: row.get(key) for key in preferred_columns if key in row}
+        if compact:
+            return compact
+        noisy_columns = {"instance_ocid", "recommendation", "threshold", "aggregation", "metric"}
+        return {
+            key: value
+            for key, value in row.items()
+            if key not in noisy_columns
+        }
+
+    def _preferred_table_columns(self, parsed: ParsedQuery, row: dict[str, Any]) -> list[str]:
+        base = ["instance_name", "compartment", "lifecycle_state"]
+        if parsed.metric_key == "cpu_memory":
+            if parsed.aggregation == "mean":
+                return base + [
+                    "cpu_mean_value",
+                    "memory_mean_value",
+                    "cpu_latest_value",
+                    "memory_latest_value",
+                ]
+            return base + [
+                "cpu_max_value",
+                "memory_max_value",
+                "cpu_latest_value",
+                "memory_latest_value",
+            ]
+        if parsed.aggregation == "mean" and "mean_value" in row:
+            return base + ["mean_value", "latest_value"]
+        if "max_value" in row:
+            return base + ["max_value", "time_of_max", "latest_value"]
+        return base
 
     def _build_chart(self, parsed: ParsedQuery, result: ExecutionResult) -> ChartBlock | None:
         if not result.chart_series:

@@ -281,6 +281,19 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         self.assertEqual(second_response.status, "success")
         self.assertIn("worst-performing compute instances", second_response.interpretation)
         self.assertEqual(second_response.details.template_id, "tmpl_worst_performing_cpu_1")
+        self.assertEqual(
+            second_response.tables[0].columns,
+            [
+                "instance_name",
+                "compartment",
+                "lifecycle_state",
+                "max_value",
+                "time_of_max",
+                "latest_value",
+            ],
+        )
+        self.assertNotIn("instance_ocid", second_response.tables[0].rows[0])
+        self.assertNotIn("recommendation", second_response.tables[0].rows[0])
 
     def test_high_memory_without_threshold_requires_clarification(self) -> None:
         self.service.setup_default_context(
