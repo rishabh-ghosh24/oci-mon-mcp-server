@@ -32,14 +32,14 @@ class _ExpectedMcpAccessFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.getMessage()
-        if " /mcp HTTP/1.1" not in message:
+        if "/mcp" not in message or "HTTP/1.1" not in message:
             return True
-        expected_patterns = (
-            '"GET /mcp HTTP/1.1" 404',
-            '"DELETE /mcp HTTP/1.1" 404',
-            '"GET /mcp HTTP/1.1" 400',
-        )
-        return not any(pattern in message for pattern in expected_patterns)
+        normalized = message.split('"', 1)[1] if '"' in message else message
+        if not normalized.startswith(("GET /mcp", "DELETE /mcp")):
+            return True
+        if not any(status in message for status in (" 400", " 404")):
+            return True
+        return False
 
 
 class IdentityMiddleware:

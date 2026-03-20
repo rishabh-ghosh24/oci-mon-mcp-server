@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import unittest
@@ -13,7 +14,11 @@ import anyio
 from oci_mon_mcp.identity import RequestIdentity, reset_current_identity, set_current_identity
 from oci_mon_mcp.models import AssistantResponse
 from oci_mon_mcp.repository import JsonRepository, RepositoryFactory
-from oci_mon_mcp.server import IdentityMiddleware, create_mcp_server
+from oci_mon_mcp.server import (
+    IdentityMiddleware,
+    _ExpectedMcpAccessFilter,
+    create_mcp_server,
+)
 
 
 class MultiUserRepositoryTests(unittest.TestCase):
@@ -208,6 +213,34 @@ class ServerIdentityTests(unittest.TestCase):
         self.assertEqual(mcp_messages[0]["status"], 401)
         self.assertEqual(health_messages[0]["status"], 200)
         self.assertIn("/healthz", health_calls)
+
+
+class ServerLoggingTests(unittest.TestCase):
+    def test_expected_mcp_probe_noise_with_query_token_is_filtered(self) -> None:
+        filt = _ExpectedMcpAccessFilter()
+        record = logging.LogRecord(
+            name="uvicorn.access",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg='49.207.63.80:15530 - "GET /mcp?u=token123 HTTP/1.1" 404 Not Found',
+            args=(),
+            exc_info=None,
+        )
+        self.assertFalse(filt.filter(record))
+
+    def test_post_mcp_errors_are_not_filtered(self) -> None:
+        filt = _ExpectedMcpAccessFilter()
+        record = logging.LogRecord(
+            name="uvicorn.access",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg='49.207.63.80:15530 - "POST /mcp?u=token123 HTTP/1.1" 500 Internal Server Error',
+            args=(),
+            exc_info=None,
+        )
+        self.assertTrue(filt.filter(record))
 
 
 if __name__ == "__main__":
