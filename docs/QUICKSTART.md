@@ -86,6 +86,8 @@ export OCI_MON_MCP_TRANSPORT=streamable-http
 export OCI_MON_MCP_ARTIFACT_BASE_URL=http://<vm-public-ip>:8765
 export OCI_MON_MCP_ARTIFACT_HOST=0.0.0.0
 export OCI_MON_MCP_ARTIFACT_PORT=8765
+export OCI_MON_MCP_PUBLIC_HOST=<vm-public-ip>
+export OCI_MON_MCP_PUBLIC_PORT=8000
 
 # Avoid matplotlib cache warnings on the VM.
 export MPLCONFIGDIR=/tmp/matplotlib
@@ -94,6 +96,8 @@ export OCI_MON_MCP_SUPPRESS_EXPECTED_MCP_PROBE_LOGS=1
 # Optional: location for shared VM runtime state (templates/shared learnings/profile memory).
 # Defaults to <repo>/data/runtime
 export OCI_MON_MCP_STATE_DIR=/home/opc/oci-mon-mcp-server/data/runtime
+# Enable token enforcement for the shared-VM pilot.
+export OCI_MON_MCP_REQUIRE_TOKEN=1
 ```
 
 If you want the main MCP endpoint on a different path:
@@ -112,8 +116,11 @@ export OCI_MON_MCP_TRANSPORT=streamable-http
 export OCI_MON_MCP_ARTIFACT_BASE_URL=http://<vm-public-ip>:8765
 export OCI_MON_MCP_ARTIFACT_HOST=0.0.0.0
 export OCI_MON_MCP_ARTIFACT_PORT=8765
+export OCI_MON_MCP_PUBLIC_HOST=<vm-public-ip>
+export OCI_MON_MCP_PUBLIC_PORT=8000
 export MPLCONFIGDIR=/tmp/matplotlib
 export OCI_MON_MCP_STATE_DIR=/home/opc/oci-mon-mcp-server/data/runtime
+export OCI_MON_MCP_REQUIRE_TOKEN=1
 EOF
 
 source ~/.bashrc
@@ -129,9 +136,62 @@ OCI_MON_MCP_TRANSPORT=streamable-http
 OCI_MON_MCP_ARTIFACT_BASE_URL=http://<vm-public-ip>:8765
 OCI_MON_MCP_ARTIFACT_HOST=0.0.0.0
 OCI_MON_MCP_ARTIFACT_PORT=8765
+OCI_MON_MCP_PUBLIC_HOST=<vm-public-ip>
+OCI_MON_MCP_PUBLIC_PORT=8000
+OCI_MON_MCP_REQUIRE_TOKEN=1
 MPLCONFIGDIR=/tmp/matplotlib
+OCI_MON_MCP_STATE_DIR=/home/opc/oci-mon-mcp-server/data/runtime
 EOF
 ```
+
+## 6.1 Pilot Multi-User Setup
+For the 3-4 tester pilot, the server is intended to run with token enforcement enabled.
+
+Each tester/client pair gets a unique tokenized MCP URL:
+
+```text
+http://<vm-public-ip>:8000/mcp?u=<token>
+```
+
+Create tokens with:
+
+```bash
+python3 scripts/manage_users.py add "alice" --client codex
+python3 scripts/manage_users.py add "alice" --client claude
+python3 scripts/manage_users.py list
+```
+
+Important rules:
+- Use the same `user_id` for the same human across clients.
+- Use separate `--client` values for `codex` and `claude`.
+- Tokens are credentials. Treat them like secrets.
+- `codex` and `claude` get separate profile directories on purpose so conversation state does not collide.
+
+Expected profile storage:
+
+```text
+data/runtime/users/pilot_alice_codex/
+data/runtime/users/pilot_alice_claude/
+```
+
+The first live interaction for a fresh profile should ask for:
+- default OCI region
+- default compartment
+
+The server no longer relies on the model guessing a region for a brand-new profile.
+
+## 6.2 Migration from Legacy Shared Runtime State
+If you already ran an older shared-state version of the server, migrate runtime state once:
+
+```bash
+python3 scripts/migrate_to_multi_user.py
+```
+
+What it does:
+- backs up the legacy runtime files under `data/runtime/.backup/`
+- creates per-profile directories under `data/runtime/users/`
+- moves shared templates/preferences into `data/runtime/shared/`
+- creates `data/runtime/user_registry.json` for token management
 
 ## 7. Start the Server
 ```bash
@@ -207,6 +267,16 @@ Health check endpoint (recommended for probes/uptime checks):
 curl -i http://127.0.0.1:8000/healthz
 ```
 
+Pilot token check:
+
+```bash
+curl -i http://127.0.0.1:8000/mcp
+```
+
+Expected result in pilot mode:
+- `/healthz` returns `200`
+- bare `/mcp` returns `401 Missing or invalid MCP user token`
+
 If startup fails, inspect logs:
 
 ```bash
@@ -239,9 +309,21 @@ The prototype exposes these tools:
 - The repo ships generic starter templates in `data/seed_query_templates.json`.
 - The repo ships generic starter memory in `data/seed_user_memory.json`.
 - At first startup, runtime state is created under `data/runtime/` (or `OCI_MON_MCP_STATE_DIR`).
-- Runtime files are shared by the VM-hosted server and should not be committed.
-- Successful query templates are shared across users on the VM.
-- High-confidence learned preferences are saved at both profile scope and shared VM scope.
+- Runtime files should not be committed.
+- Per-profile state lives under `data/runtime/users/<profile_id>/`.
+- Shared promoted learnings live under `data/runtime/shared/`.
+- Successful templates are saved per profile first.
+- Learned metric preferences are saved per profile first.
+- Shared cross-user preferences are promoted later by aggregation.
+
+### Aggregate shared learnings for the pilot
+To promote multi-user learnings into shared runtime stores:
+
+```bash
+python3 scripts/aggregate_learnings.py
+```
+
+This is intended for scheduled execution on the VM after multiple users have built up history.
 
 ### Promote generic learnings safely
 To promote runtime learnings back into generic seed files:
