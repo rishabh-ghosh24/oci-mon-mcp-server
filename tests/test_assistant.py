@@ -341,12 +341,24 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         self.assertIn("disk i/o throughput", third_response.interpretation.lower())
 
     def test_discover_accessible_compartments_returns_listing(self) -> None:
-        listing = self.service.discover_accessible_compartments(
+        self.service.setup_default_context(
             region="us-ashburn-1",
+            compartment_name="prod-observability",
+        )
+        listing = self.service.discover_accessible_compartments(
             profile_id="default",
         )
         self.assertEqual(listing["count"], 2)
         self.assertEqual(listing["compartments"][0]["name"], "prod-observability")
+
+    def test_discover_accessible_compartments_requires_initial_setup_even_if_region_is_supplied(self) -> None:
+        listing = self.service.discover_accessible_compartments(
+            region="ap-mumbai-1",
+            profile_id="default",
+        )
+
+        self.assertEqual(listing["status"], "needs_clarification")
+        self.assertIn("not configured yet", listing["summary"].lower())
 
     def test_auth_fallback_prompt_is_returned_when_instance_principals_fail(self) -> None:
         repository = JsonRepository(data_dir=Path(self.tempdir.name) / "fallback")

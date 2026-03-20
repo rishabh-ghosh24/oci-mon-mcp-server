@@ -291,6 +291,16 @@ class MonitoringAssistantService:
     ) -> dict[str, Any]:
         """List accessible compartments using the current auth mode."""
         profile = self.repository.get_profile(profile_id)
+        if not profile.get("region") or not profile.get("default_compartment_name"):
+            return {
+                "status": "needs_clarification",
+                "summary": "Default region and compartment are not configured yet.",
+                "question": (
+                    "What OCI region and default compartment should I save for this profile? "
+                    "Use setup_default_context first instead of guessing a region in tool calls."
+                ),
+                "compartments": [],
+            }
         resolved_region = region.strip() or profile.get("region")
         if not resolved_region:
             return {
