@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,7 +14,7 @@ from oci_mon_mcp.server import SERVICE, _artifact_inline_markdown
 class ServerArtifactMarkdownTests(unittest.TestCase):
     """Verify inline markdown generation for chart artifacts."""
 
-    def test_prefers_local_png_path_when_artifact_exists(self) -> None:
+    def test_prefers_data_uri_when_artifact_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tempdir:
             original_artifact_manager = SERVICE.artifact_manager
             try:
@@ -33,9 +34,10 @@ class ServerArtifactMarkdownTests(unittest.TestCase):
                         "url": "http://example.invalid/chart123.png",
                     }
                 )
+                encoded = base64.b64encode(b"png").decode("ascii")
                 self.assertEqual(
                     markdown,
-                    f"![CPU utilization trend]({png_path.resolve()})",
+                    f"![CPU utilization trend](data:image/png;base64,{encoded})",
                 )
             finally:
                 SERVICE.artifact_manager = original_artifact_manager
