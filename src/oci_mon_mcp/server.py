@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import logging
 import os
+from pathlib import Path
 import sys
 from typing import Any
 
@@ -179,6 +180,22 @@ def _direct_initial_setup_guard(
     )
 
 
+def _artifact_inline_markdown(artifact: dict[str, Any]) -> str | None:
+    """Prefer a local absolute file embed for PNG artifacts, with URL fallback."""
+    if artifact.get("type") != "image/png":
+        return None
+
+    artifact_id = artifact.get("id")
+    if artifact_id:
+        png_path = (SERVICE.artifact_manager.base_dir / f"{artifact_id}.png").resolve()
+        if png_path.is_file():
+            return f"![{artifact.get('title', 'Chart')}]({png_path})"
+
+    if artifact.get("url"):
+        return f"![{artifact.get('title', 'Chart')}]({artifact['url']})"
+    return None
+
+
 def create_mcp_server() -> Any:
     """Create the FastMCP server when the dependency is available."""
     if FastMCP is None:
@@ -237,10 +254,12 @@ def create_mcp_server() -> Any:
         response = SERVICE.handle_query(query=query, profile_id=_effective_profile_id(profile_id))
         response_dict = asdict(response)
 
-        # Add markdown image references for clients that render markdown (e.g. Codex)
+        # Prefer local absolute file embeds for PNG artifacts in markdown-capable clients.
+        # Keep the remote URL in the artifact payload as the clickable fallback.
         for artifact in response_dict.get("artifacts", []):
-            if artifact.get("type") == "image/png" and artifact.get("url"):
-                artifact["inline_markdown"] = f"![{artifact.get('title', 'Chart')}]({artifact['url']})"
+            inline_markdown = _artifact_inline_markdown(artifact)
+            if inline_markdown is not None:
+                artifact["inline_markdown"] = inline_markdown
 
         result: list = [response_dict]
 
