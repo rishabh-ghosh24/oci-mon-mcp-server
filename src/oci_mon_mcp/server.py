@@ -196,8 +196,6 @@ def create_mcp_server() -> Any:
         port=int(os.getenv("OCI_MON_MCP_PORT", "8000")),
         mount_path=os.getenv("OCI_MON_MCP_MOUNT_PATH", "/"),
         streamable_http_path=os.getenv("OCI_MON_MCP_STREAMABLE_HTTP_PATH", "/mcp"),
-        json_response=os.getenv("OCI_MON_MCP_JSON_RESPONSE", "1") == "1",
-        stateless_http=os.getenv("OCI_MON_MCP_STATELESS_HTTP", "1") == "1",
     )
     streamable_path = os.getenv("OCI_MON_MCP_STREAMABLE_HTTP_PATH", "/mcp")
 

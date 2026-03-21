@@ -250,12 +250,12 @@ class ServerIdentityTests(unittest.TestCase):
         self.assertEqual(change_response["status"], "needs_clarification")
         self.assertEqual(fake_service.calls, [("setup_default_context", "pilot_alice_codex")])
 
-    def test_streamable_http_defaults_to_stateless_json_mode(self) -> None:
+    def test_streamable_http_uses_sse_by_default(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             mcp = create_mcp_server()
 
-        self.assertTrue(mcp.settings.json_response)
-        self.assertTrue(mcp.settings.stateless_http)
+        self.assertFalse(mcp.settings.json_response)
+        self.assertFalse(mcp.settings.stateless_http)
 
 
 class ServerLoggingTests(unittest.TestCase):
