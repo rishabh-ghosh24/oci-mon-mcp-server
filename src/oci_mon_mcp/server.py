@@ -233,15 +233,7 @@ def create_mcp_server() -> Any:
     def monitoring_assistant(query: str, profile_id: str = "default"):
         """Interpret a monitoring question and return a structured response."""
         response = SERVICE.handle_query(query=query, profile_id=_effective_profile_id(profile_id))
-        response_dict = asdict(response)
-
-        # Add markdown image references for clients that render markdown (e.g. Codex).
-        # Uses the artifact URL so clients can fetch the chart image directly.
-        for artifact in response_dict.get("artifacts", []):
-            if artifact.get("type") == "image/png" and artifact.get("url"):
-                artifact["inline_markdown"] = f"![{artifact.get('title', 'Chart')}]({artifact['url']})"
-
-        return response_dict
+        return asdict(response)
 
     @mcp.tool()
     def setup_default_context(
