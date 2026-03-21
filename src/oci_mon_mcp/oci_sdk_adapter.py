@@ -118,6 +118,7 @@ class OciSdkExecutionAdapter:
                 "instance_ocid": None,
                 "compartment": request.compartment_name,
                 "lifecycle_state": "UNKNOWN",
+                "time_created": None,
                 "metric_values": {},
                 "points": defaultdict(list),
                 "time_of_max": None,
@@ -170,6 +171,7 @@ class OciSdkExecutionAdapter:
                 instance["instance_ocid"] = dimensions.get("resourceId") or metadata.get("id")
                 instance["compartment"] = compartment_name
                 instance["lifecycle_state"] = metadata.get("lifecycle_state", "UNKNOWN")
+                instance["time_created"] = metadata.get("time_created")
 
                 points = sorted(
                     metric_data.aggregated_datapoints or [],
@@ -350,11 +352,13 @@ class OciSdkExecutionAdapter:
                 raise
         instance_index: dict[str, dict[str, str]] = {}
         for instance in instances:
+            time_created = getattr(instance, "time_created", None)
             metadata = {
                 "id": instance.id,
                 "display_name": instance.display_name,
                 "lifecycle_state": instance.lifecycle_state,
                 "compartment_id": getattr(instance, "compartment_id", None),
+                "time_created": time_created.isoformat() if time_created else None,
             }
             instance_index[instance.id] = metadata
             display_name = getattr(instance, "display_name", None)
@@ -414,6 +418,7 @@ class OciSdkExecutionAdapter:
                     "instance_ocid": stream["instance_ocid"],
                     "compartment": stream["compartment"],
                     "lifecycle_state": stream["lifecycle_state"],
+                    "time_created": stream["time_created"],
                     "metric": request.parsed_query.metric_label,
                     "threshold": request.parsed_query.threshold,
                     "aggregation": aggregation,
@@ -446,6 +451,7 @@ class OciSdkExecutionAdapter:
                 "instance_ocid": stream["instance_ocid"],
                 "compartment": stream["compartment"],
                 "lifecycle_state": stream["lifecycle_state"],
+                "time_created": stream["time_created"],
                 "metric": request.parsed_query.metric_label,
                 "threshold": request.parsed_query.threshold,
                 "aggregation": aggregation,
