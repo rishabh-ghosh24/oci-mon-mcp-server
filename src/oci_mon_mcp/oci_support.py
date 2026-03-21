@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import importlib
+import logging
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from .errors import (
     AuthFallbackSuggestedError,
@@ -30,6 +35,9 @@ class OciSession:
 class OciClientFactory:
     """Build OCI SDK clients for Instance Principals or config-file auth."""
 
+    def __init__(self) -> None:
+        self._signer_cache: dict[str, Any] = {}
+
     def _import_oci(self) -> Any:
         try:
             return importlib.import_module("oci")
@@ -54,13 +62,17 @@ class OciClientFactory:
         config_fallback = config_fallback or {}
 
         if auth_mode == "instance_principal":
-            try:
-                signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
-            except Exception as exc:  # pragma: no cover - environment-dependent
-                raise AuthFallbackSuggestedError(
-                    "Instance Principals authentication failed. Switch to OCI config fallback "
-                    "if this VM is not configured with a dynamic group and matching policies."
-                ) from exc
+            if "instance_principal" in self._signer_cache:
+                signer = self._signer_cache["instance_principal"]
+            else:
+                try:
+                    signer = oci.auth.signers.InstancePrincipalsSecurityTokenSigner()
+                except Exception as exc:  # pragma: no cover - environment-dependent
+                    raise AuthFallbackSuggestedError(
+                        "Instance Principals authentication failed. Switch to OCI config fallback "
+                        "if this VM is not configured with a dynamic group and matching policies."
+                    ) from exc
+                self._signer_cache["instance_principal"] = signer
 
             session = OciSession(
                 oci=oci,
@@ -109,11 +121,16 @@ class OciClientFactory:
         return session
 
 
+_DEFAULT_COMPARTMENT_CACHE_TTL = 900  # 15 minutes
+
+
 class OciContextResolver:
     """Resolve compartment context and list accessible compartments."""
 
     def __init__(self, client_factory: OciClientFactory | None = None) -> None:
         self.client_factory = client_factory or OciClientFactory()
+        self._compartment_cache: dict[tuple, tuple[float, dict[str, Any]]] = {}
+        self._compartment_cache_lock = threading.Lock()
 
     def list_accessible_compartments(
         self,
@@ -123,6 +140,14 @@ class OciContextResolver:
         config_fallback: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """List accessible compartments in the current tenancy and region."""
+        cache_key = (region, auth_mode)
+        with self._compartment_cache_lock:
+            entry = self._compartment_cache.get(cache_key)
+            if entry is not None:
+                ts, data = entry
+                if (time.monotonic() - ts) < _DEFAULT_COMPARTMENT_CACHE_TTL:
+                    return data
+
         session = self.client_factory.build_session(
             region=region,
             auth_mode=auth_mode,
@@ -159,12 +184,15 @@ class OciContextResolver:
                 }
             )
         compartments.sort(key=lambda item: (item["name"].lower(), item["id"]))
-        return {
+        result = {
             "tenancy_id": session.tenancy_id,
             "region": region,
             "count": len(compartments),
             "compartments": compartments,
         }
+        with self._compartment_cache_lock:
+            self._compartment_cache[cache_key] = (time.monotonic(), result)
+        return result
 
     def resolve_compartment(
         self,

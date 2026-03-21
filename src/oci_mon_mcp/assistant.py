@@ -33,10 +33,10 @@ from .repository import JsonRepository, utc_now_iso
 SUPPORTED_TIME_RANGES: dict[str, str] = {
     "15m": "1m",
     "30m": "1m",
-    "1h": "1m",
+    "1h": "5m",
     "6h": "5m",
-    "24h": "5m",
-    "7d": "1h",
+    "24h": "1h",
+    "7d": "1d",
 }
 
 METRIC_CONFIGS: dict[str, dict[str, Any]] = {

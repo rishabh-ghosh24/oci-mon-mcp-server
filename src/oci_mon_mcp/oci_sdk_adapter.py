@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import logging
+import os
+import threading
+import time
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -9,6 +14,7 @@ from typing import Any
 from .oci_support import OciClientFactory
 from .models import ChartPoint, ChartSeries, ExecutionResult, QueryExecutionRequest
 
+logger = logging.getLogger(__name__)
 
 TIME_RANGE_TO_DELTA: dict[str, timedelta] = {
     "15m": timedelta(minutes=15),
@@ -21,12 +27,49 @@ TIME_RANGE_TO_DELTA: dict[str, timedelta] = {
 
 THRESHOLD_NO_MATCH_LIMIT = 5
 
+_DEFAULT_INSTANCE_CACHE_TTL = 900  # 15 minutes
+
+
+class _InstanceCache:
+    """Thread-safe instance listing cache with stale-while-revalidate."""
+
+    def __init__(self, ttl_seconds: int = _DEFAULT_INSTANCE_CACHE_TTL) -> None:
+        self._ttl = ttl_seconds
+        self._store: dict[tuple, tuple[float, dict]] = {}
+        self._lock = threading.Lock()
+        self._refreshing: set[tuple] = set()
+
+    def get(self, key: tuple) -> tuple[dict | None, bool]:
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return None, False
+            ts, data = entry
+            stale = (time.monotonic() - ts) > self._ttl
+            return data, stale
+
+    def put(self, key: tuple, data: dict) -> None:
+        with self._lock:
+            self._store[key] = (time.monotonic(), data)
+            self._refreshing.discard(key)
+
+    def mark_refreshing(self, key: tuple) -> bool:
+        """Return True if this caller should trigger the refresh (not already in progress)."""
+        with self._lock:
+            if key in self._refreshing:
+                return False
+            self._refreshing.add(key)
+            return True
+
 
 class OciSdkExecutionAdapter:
     """Execute Monitoring queries through the OCI Python SDK."""
 
     def __init__(self, client_factory: OciClientFactory | None = None) -> None:
         self.client_factory = client_factory or OciClientFactory()
+        self._instance_cache = _InstanceCache(
+            ttl_seconds=int(os.getenv("OCI_MON_MCP_INSTANCE_CACHE_TTL", str(_DEFAULT_INSTANCE_CACHE_TTL)))
+        )
 
     def execute(self, request: QueryExecutionRequest) -> ExecutionResult:
         if not request.compartment_id:
@@ -45,13 +88,27 @@ class OciSdkExecutionAdapter:
         assert session.monitoring_client is not None
         assert session.compute_client is not None
         oci = session.oci
-        instance_index = self._list_instances(
-            oci,
-            session.compute_client,
-            request.compartment_id,
-            include_subcompartments=request.include_subcompartments,
-            compartment_lookup=request.compartment_lookup,
-        )
+
+        # --- Instance listing with stale-while-revalidate cache ---
+        cache_key = (request.region, request.compartment_id, request.include_subcompartments)
+        cached_index, is_stale = self._instance_cache.get(cache_key)
+        if cached_index is not None:
+            instance_index = cached_index
+            if is_stale and self._instance_cache.mark_refreshing(cache_key):
+                threading.Thread(
+                    target=self._refresh_instance_cache,
+                    args=(oci, session.compute_client, request, cache_key),
+                    daemon=True,
+                ).start()
+        else:
+            instance_index = self._list_instances(
+                oci,
+                session.compute_client,
+                request.compartment_id,
+                include_subcompartments=request.include_subcompartments,
+                compartment_lookup=request.compartment_lookup,
+            )
+            self._instance_cache.put(cache_key, instance_index)
 
         end_time = datetime.now(UTC)
         start_time = end_time - TIME_RANGE_TO_DELTA[request.parsed_query.time_range]
@@ -69,32 +126,30 @@ class OciSdkExecutionAdapter:
             }
         )
 
-        include_subtree_for_monitoring = request.include_subcompartments
-        for query_text in request.query_text.splitlines():
-            metric_name = query_text.split("[", 1)[0]
-            details = oci.monitoring.models.SummarizeMetricsDataDetails(
-                namespace=request.parsed_query.namespace,
-                query=query_text,
-                start_time=start_time,
-                end_time=end_time,
-                resolution=request.parsed_query.interval,
-            )
-            summarize_kwargs: dict[str, Any] = {
-                "compartment_id": request.compartment_id,
-                "summarize_metrics_data_details": details,
-            }
-            if include_subtree_for_monitoring:
-                summarize_kwargs["compartment_id_in_subtree"] = True
-            try:
-                response = session.monitoring_client.summarize_metrics_data(**summarize_kwargs)
-            except Exception as exc:
-                if include_subtree_for_monitoring and self._is_non_tenancy_subtree_error(exc):
-                    include_subtree_for_monitoring = False
-                    summarize_kwargs.pop("compartment_id_in_subtree", None)
-                    response = session.monitoring_client.summarize_metrics_data(**summarize_kwargs)
-                else:
-                    raise
-            for metric_data in response.data:
+        # --- Parallel metric queries ---
+        queries = request.query_text.splitlines()
+        include_subtree = request.include_subcompartments
+        if len(queries) > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(queries)) as pool:
+                futures = [
+                    pool.submit(
+                        self._fetch_metric, session, oci, q, request,
+                        start_time, end_time, include_subtree,
+                    )
+                    for q in queries
+                ]
+                metric_results = [f.result() for f in futures]
+        else:
+            metric_results = [
+                self._fetch_metric(
+                    session, oci, queries[0], request,
+                    start_time, end_time, include_subtree,
+                )
+            ]
+
+        # Merge metric results into streams (sequential — no lock needed)
+        for metric_name, metric_data_list in metric_results:
+            for metric_data in metric_data_list:
                 dimensions = metric_data.dimensions or {}
                 resource_id = dimensions.get("resourceId") or dimensions.get("resourceDisplayName")
                 if resource_id is None:
@@ -194,6 +249,65 @@ class OciSdkExecutionAdapter:
                 f"{request.compartment_name} over the last {request.parsed_query.time_range}."
             )
         return ExecutionResult(summary=summary, rows=rows, chart_series=chart_series)
+
+    def _fetch_metric(
+        self,
+        session: Any,
+        oci: Any,
+        query_text: str,
+        request: QueryExecutionRequest,
+        start_time: datetime,
+        end_time: datetime,
+        include_subtree: bool,
+    ) -> tuple[str, list[Any]]:
+        """Fetch a single metric from OCI Monitoring. Thread-safe."""
+        metric_name = query_text.split("[", 1)[0]
+        details = oci.monitoring.models.SummarizeMetricsDataDetails(
+            namespace=request.parsed_query.namespace,
+            query=query_text,
+            start_time=start_time,
+            end_time=end_time,
+            resolution=request.parsed_query.interval,
+        )
+        summarize_kwargs: dict[str, Any] = {
+            "compartment_id": request.compartment_id,
+            "summarize_metrics_data_details": details,
+        }
+        if include_subtree:
+            summarize_kwargs["compartment_id_in_subtree"] = True
+        try:
+            response = session.monitoring_client.summarize_metrics_data(**summarize_kwargs)
+        except Exception as exc:
+            if include_subtree and self._is_non_tenancy_subtree_error(exc):
+                summarize_kwargs.pop("compartment_id_in_subtree", None)
+                response = session.monitoring_client.summarize_metrics_data(**summarize_kwargs)
+            else:
+                raise
+        return metric_name, response.data
+
+    def _refresh_instance_cache(
+        self,
+        oci: Any,
+        compute_client: Any,
+        request: QueryExecutionRequest,
+        cache_key: tuple,
+    ) -> None:
+        """Background refresh for stale instance cache entries."""
+        try:
+            index = self._list_instances(
+                oci,
+                compute_client,
+                request.compartment_id,
+                include_subcompartments=request.include_subcompartments,
+                compartment_lookup=request.compartment_lookup,
+            )
+            self._instance_cache.put(cache_key, index)
+            logger.debug("Instance cache refreshed for %s", cache_key)
+        except Exception:
+            logger.warning("Background instance cache refresh failed for %s", cache_key, exc_info=True)
+            # Clear refreshing flag so next query retries
+            with self._instance_cache._lock:
+                self._instance_cache._refreshing.discard(cache_key)
 
     def _is_non_tenancy_subtree_error(self, exc: Exception) -> bool:
         message = str(exc)
