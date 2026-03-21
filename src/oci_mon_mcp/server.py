@@ -26,10 +26,8 @@ from .repository import JsonRepository, RepositoryFactory
 
 try:
     from mcp.server.fastmcp import FastMCP
-    from mcp.server.fastmcp.utilities.types import Image as McpImage
 except ImportError:  # pragma: no cover - exercised by import fallback tests instead
     FastMCP = None  # type: ignore[assignment]
-    McpImage = None  # type: ignore[assignment]
 
 
 REPOSITORY_FACTORY = RepositoryFactory()
@@ -243,20 +241,7 @@ def create_mcp_server() -> Any:
             if artifact.get("type") == "image/png" and artifact.get("url"):
                 artifact["inline_markdown"] = f"![{artifact.get('title', 'Chart')}]({artifact['url']})"
 
-        result: list = [response_dict]
-
-        # Embed PNG chart artifacts as inline MCP ImageContent blocks (for Claude clients).
-        # Set OCI_MON_MCP_INLINE_IMAGES=0 to disable (e.g. for Codex-only deployments
-        # where ImageContent renders as a broken image icon).
-        if McpImage is not None and os.getenv("OCI_MON_MCP_INLINE_IMAGES", "1") == "1":
-            for artifact in response.artifacts:
-                if artifact.type != "image/png":
-                    continue
-                png_path = SERVICE.artifact_manager.base_dir / f"{artifact.id}.png"
-                if png_path.is_file():
-                    result.append(McpImage(path=png_path))
-
-        return result
+        return response_dict
 
     @mcp.tool()
     def setup_default_context(

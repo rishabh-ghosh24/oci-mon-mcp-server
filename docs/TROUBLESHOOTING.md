@@ -32,13 +32,11 @@ The primary bottleneck is OCI Monitoring API latency, not server CPU or memory. 
 - Upgrading VM CPU/RAM (server uses <60MB memory)
 - Caching metric data (users expect current values)
 
-## Charts show broken image icon (Codex / non-Claude clients)
+## Charts not rendering inline (Codex / non-Claude clients)
 
-MCP `ImageContent` blocks are not supported by all clients. Codex shows a broken image icon.
+Inline chart rendering depends on client support. Codex does not currently render MCP image content or markdown image URLs inline.
 
-**Solution:** Set `OCI_MON_MCP_INLINE_IMAGES=0` in your systemd service to disable base64 image embedding. Charts will still be available via:
-- The `inline_markdown` field in artifacts (rendered by markdown-capable clients)
-- The clickable artifact URL link
+**Workaround:** Use the clickable artifact URL link provided below the table to view the chart in a browser. The artifact URL is always included in the response.
 
 ## LLM client auto-switches auth to config file
 
@@ -135,7 +133,6 @@ Result correctness (max, avg, latest values) is not affected — OCI computes ag
 | Variable | Default | Description |
 |---|---|---|
 | `OCI_MON_MCP_INSTANCE_CACHE_TTL` | `900` | Instance listing cache TTL in seconds |
-| `OCI_MON_MCP_INLINE_IMAGES` | `1` | Set to `0` to disable base64 ImageContent |
 | `OCI_MON_MCP_ARTIFACT_PORT` | `8765` | Artifact HTTP server port |
 | `OCI_MON_MCP_ARTIFACT_HOST` | `0.0.0.0` | Artifact HTTP server bind address |
 | `OCI_MON_MCP_ARTIFACT_BASE_URL` | (auto) | Base URL for artifact links |
