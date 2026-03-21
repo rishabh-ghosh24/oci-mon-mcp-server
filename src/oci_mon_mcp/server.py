@@ -235,10 +235,19 @@ def create_mcp_server() -> Any:
     def monitoring_assistant(query: str, profile_id: str = "default"):
         """Interpret a monitoring question and return a structured response."""
         response = SERVICE.handle_query(query=query, profile_id=_effective_profile_id(profile_id))
-        result: list = [asdict(response)]
+        response_dict = asdict(response)
 
-        # Embed PNG chart artifacts as inline MCP ImageContent blocks
-        if McpImage is not None:
+        # Add markdown image references for clients that render markdown (e.g. Codex)
+        for artifact in response_dict.get("artifacts", []):
+            if artifact.get("type") == "image/png" and artifact.get("url"):
+                artifact["inline_markdown"] = f"![{artifact.get('title', 'Chart')}]({artifact['url']})"
+
+        result: list = [response_dict]
+
+        # Embed PNG chart artifacts as inline MCP ImageContent blocks (for Claude clients).
+        # Set OCI_MON_MCP_INLINE_IMAGES=0 to disable (e.g. for Codex-only deployments
+        # where ImageContent renders as a broken image icon).
+        if McpImage is not None and os.getenv("OCI_MON_MCP_INLINE_IMAGES", "1") == "1":
             for artifact in response.artifacts:
                 if artifact.type != "image/png":
                     continue
