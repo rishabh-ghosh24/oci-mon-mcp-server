@@ -1186,6 +1186,8 @@ class MonitoringAssistantService:
 
     def _preferred_table_columns(self, parsed: ParsedQuery, row: dict[str, Any]) -> list[str]:
         base = ["instance_name", "compartment", "lifecycle_state"]
+        if row.get("time_created") is not None:
+            base.append("time_created")
         if parsed.metric_key == "cpu_memory":
             if parsed.aggregation == "mean":
                 return base + [
