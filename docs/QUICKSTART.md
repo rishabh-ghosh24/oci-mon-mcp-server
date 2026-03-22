@@ -91,8 +91,9 @@ export OCI_MON_MCP_PUBLIC_PORT=8000
 
 # Avoid matplotlib cache warnings on the VM.
 export MPLCONFIGDIR=/tmp/matplotlib
-# Optional: suppress expected noisy /mcp probe access logs (404/400).
-export OCI_MON_MCP_SUPPRESS_EXPECTED_MCP_PROBE_LOGS=1
+# Suppress expected noisy /mcp probe access logs (404/400).
+# Defaults to 1 (enabled). Export =0 to explicitly disable suppression.
+# export OCI_MON_MCP_SUPPRESS_EXPECTED_MCP_PROBE_LOGS=0
 # Optional: location for shared VM runtime state (templates/shared learnings/profile memory).
 # Defaults to <repo>/data/runtime
 export OCI_MON_MCP_STATE_DIR=/home/opc/oci-mon-mcp-server/data/runtime
@@ -336,8 +337,9 @@ python3 scripts/promote_seeds.py
 The promotion script is conservative and skips entries that contain likely sensitive data
 (for example OCIDs, IP addresses, emails, or secret-like tokens).
 
-### Response table format (standard)
-Use this exact table schema and order in user-facing responses for CPU utilization queries:
+### Response table format (compute CPU example)
+Use this exact table schema and order in user-facing responses for CPU utilization queries.
+Column schema adapts to the metric type; the example below shows the compute CPU layout:
 
 | Instance | Compartment | Lifecycle | Max CPU % | Time of Max (UTC) | Latest CPU % |
 |---|---|---|---:|---|---:|
@@ -410,11 +412,12 @@ Formatting rules:
 
 ## 12. Data Files
 The prototype persists local state under `data/`:
-- `data/runtime/user_memory.json` for defaults, learned preferences, pending clarification state,
-  and shared VM-wide preferences
-- `data/runtime/query_templates.json` for successful NL-to-query templates shared across users on
-  the VM
-- `data/artifacts/` for generated PNG and CSV files
+- `data/runtime/users/<profile_id>/user_memory.json` — per-user defaults and preferences
+- `data/runtime/users/<profile_id>/query_templates.json` — per-user learned templates
+- `data/runtime/shared/` — cross-user promoted learnings
+- `data/logs/audit.log` — JSONL audit log with per-request timing
+- `data/artifacts/` — generated PNG charts and CSV exports
+- `data/metric_registry.yaml` — metric namespace registry
 
 ## 13. Operational Notes
 - Compute CPU and memory metrics require the Compute Instance Monitoring plugin to be enabled.

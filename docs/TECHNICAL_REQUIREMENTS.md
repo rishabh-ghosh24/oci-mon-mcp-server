@@ -9,7 +9,7 @@ Monitoring MCP server. It is the build-ready technical companion to
 Build a Python-based MCP server running on an OCI Compute VM that can:
 - receive natural-language monitoring requests
 - clarify ambiguity before execution
-- query OCI Monitoring for supported compute flows
+- query OCI Monitoring across registry-driven metric namespaces
 - return structured results plus PNG and CSV artifacts
 - persist learned meanings and successful query templates
 
@@ -312,7 +312,7 @@ Runtime discovery should be used for:
 
 ### 9.2 Discovery Constraints
 - Discovery should not be treated as unrestricted query generation.
-- Supported product behavior remains constrained to the compute-centric flows in this prototype.
+- Supported product behavior is registry-driven and extensible across all registered namespaces, with compute as the primary example.
 
 ### 9.3 Discovery Caching
 Cache namespace and metric discovery results locally with TTL.
@@ -445,8 +445,8 @@ This is required so the server can:
 ## 12. Output and Artifact Requirements
 
 ### 12.1 Table Output Rules
-- default on-screen row limit: 10
-- keep on-screen output capped at 10 for consistency
+- default on-screen row limit: 20
+- keep on-screen output capped at 20 for consistency
 - export full result set to CSV when rows exceed the visible limit or when the user requests export
 
 ### 12.2 Chart Output Rules
@@ -600,8 +600,8 @@ Scope this store by:
 
 ### 15.2 Prototype Limits
 - chart top 10 series only
-- default visible rows 10
-- keep visible rows capped at 10 for consistency
+- default visible rows 20
+- keep visible rows capped at 20 for consistency
 - broader result sets should be export-only beyond the visible limit
 - default scope is one compartment only unless explicitly widened
 

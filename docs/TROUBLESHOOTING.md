@@ -15,23 +15,12 @@ The server uses a metric registry (`data/metric_registry.yaml`) to map natural-l
 
 ## My compute instance doesn't appear in results
 
-Instance cache has a 15-minute TTL with stale-while-revalidate. New instances will appear within 15 minutes of creation. The cache refreshes in the background — the first query after TTL expires serves stale data while refreshing.
+The server caches compute instance listings for **15 minutes** (stale-while-revalidate). A newly created or deleted instance may not appear immediately. When the TTL expires, the next query still returns cached data instantly while a background thread refreshes the cache for subsequent queries.
 
 **Solutions:**
 - Wait up to 15 minutes for the cache to refresh automatically
 - Restart the server to clear the cache: `sudo systemctl restart oci-mon-mcp-server`
 - Adjust the TTL via `OCI_MON_MCP_INSTANCE_CACHE_TTL` (in seconds, default: `900`)
-
-## I don't see my new compute instance in results
-
-The server caches compute instance listings for **15 minutes** (stale-while-revalidate). A newly created or deleted instance may not appear immediately.
-
-**Solutions:**
-- Wait up to 15 minutes for the cache to refresh automatically
-- Restart the server to clear the cache: `sudo systemctl restart oci-mon-mcp-server`
-- Adjust the TTL via `OCI_MON_MCP_INSTANCE_CACHE_TTL` (in seconds, default: `900`)
-
-The cache uses stale-while-revalidate: when the TTL expires, the next query still returns cached data instantly while a background thread refreshes the cache for subsequent queries.
 
 ## Queries are slow (10+ seconds)
 
@@ -103,14 +92,6 @@ First-time users must set up their default region and compartment before queryin
 
 In pilot mode (token-based auth), context is stored per-profile, not globally.
 
-## Combined CPU+memory query not supported
-
-The query parser currently handles single-metric queries. "Show CPU and memory" is not parsed as a valid query.
-
-**Workaround:** Run two separate queries:
-1. "Show CPU utilization for all instances"
-2. "Show memory utilization for all instances"
-
 ## Inline chart not rendering in Claude Code CLI
 
 Terminal clients cannot render images — this is expected behavior. The chart image is in the MCP response but terminals cannot display it.
@@ -160,6 +141,9 @@ Result correctness (max, avg, latest values) is not affected — OCI computes ag
 | `OCI_MON_MCP_HOST` | `0.0.0.0` | MCP server bind address |
 | `OCI_MON_MCP_PORT` | `8000` | MCP server port |
 | `OCI_MON_MCP_REQUIRE_TOKEN` | `0` | Require user token for multi-user pilot |
-| `OCI_MON_MCP_JSON_RESPONSE` | `1` | Use JSON responses instead of SSE |
-| `OCI_MON_MCP_STATELESS_HTTP` | `1` | Enable stateless HTTP mode |
+| `OCI_MON_MCP_STATE_DIR` | `data/runtime` | Path to runtime state directory |
+| `OCI_MON_MCP_STREAMABLE_HTTP_PATH` | `/mcp` | MCP endpoint path |
+| `OCI_MON_MCP_SUPPRESS_EXPECTED_MCP_PROBE_LOGS` | `1` | Suppress expected 404/400 probe logs |
+| `OCI_MON_MCP_PUBLIC_HOST` | (none) | Public hostname/IP for artifact URLs |
+| `OCI_MON_MCP_PUBLIC_PORT` | (none) | Public port for MCP endpoint |
 | `OCI_MON_MCP_TRANSPORT` | `streamable-http` | MCP transport type |
