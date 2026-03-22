@@ -13,6 +13,7 @@ dependencies = [
   "mcp>=1.0.0",
   "oci>=2.150.0",
   "matplotlib>=3.9.0",
+  "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

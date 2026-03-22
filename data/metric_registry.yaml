@@ -1,0 +1,222 @@
+namespaces:
+  oci_computeagent:
+    display_name: Compute Agent
+    resource_type: Instance
+    sdk_client: ComputeClient
+    metrics:
+      cpu:
+        label: CPU utilization
+        metric_names: [CpuUtilization]
+        y_axis: cpu_utilization_percent
+        unit: percent
+        aliases: [cpu, cpu usage, cpu utilization, processor]
+      memory:
+        label: Memory utilization
+        metric_names: [MemoryUtilization]
+        y_axis: memory_utilization_percent
+        unit: percent
+        aliases: [memory, memory usage, memory utilization, ram, ram usage]
+      cpu_memory:
+        label: CPU and memory utilization
+        metric_names: [CpuUtilization, MemoryUtilization]
+        y_axis: utilization_percent
+        unit: percent
+        aliases: [cpu and memory, cpu memory, compute utilization]
+      disk_io_throughput:
+        label: Disk I/O throughput
+        metric_names: [DiskBytesRead, DiskBytesWritten]
+        y_axis: bytes_per_second
+        unit: bytes/s
+        aliases: [disk throughput, disk io throughput, disk bytes]
+      disk_io_iops:
+        label: Disk I/O operations
+        metric_names: [DiskIopsRead, DiskIopsWritten]
+        y_axis: iops
+        unit: operations/s
+        aliases: [disk iops, disk operations, disk io ops]
+
+  oci_vcn:
+    display_name: Virtual Cloud Network
+    resource_type: Vnic
+    sdk_client: VirtualNetworkClient
+    metrics:
+      vcn_bytes_in:
+        label: Network bytes received
+        metric_names: [VnicFromNetworkBytes]
+        y_axis: bytes_per_second
+        unit: bytes/s
+        aliases: [network ingress bytes, network bytes in, vcn bytes in, incoming bytes, inbound bytes]
+      vcn_bytes_out:
+        label: Network bytes sent
+        metric_names: [VnicToNetworkBytes]
+        y_axis: bytes_per_second
+        unit: bytes/s
+        aliases: [network egress bytes, network bytes out, vcn bytes out, outgoing bytes, outbound bytes]
+      vcn_packets_in:
+        label: Network packets received
+        metric_names: [VnicFromNetworkPackets]
+        y_axis: packets_per_second
+        unit: packets/s
+        aliases: [network ingress packets, network packets in, vcn packets in, incoming packets]
+      vcn_packets_out:
+        label: Network packets sent
+        metric_names: [VnicToNetworkPackets]
+        y_axis: packets_per_second
+        unit: packets/s
+        aliases: [network egress packets, network packets out, vcn packets out, outgoing packets]
+
+  oci_blockstore:
+    display_name: Block Storage
+    resource_type: BootVolume
+    sdk_client: BlockstorageClient
+    metrics:
+      volume_read_throughput:
+        label: Volume read throughput
+        metric_names: [VolumeReadThroughput]
+        y_axis: bytes_per_second
+        unit: bytes/s
+        aliases: [volume read throughput, block read throughput, volume read bytes]
+      volume_write_throughput:
+        label: Volume write throughput
+        metric_names: [VolumeWriteThroughput]
+        y_axis: bytes_per_second
+        unit: bytes/s
+        aliases: [volume write throughput, block write throughput, volume write bytes]
+      volume_read_ops:
+        label: Volume read operations
+        metric_names: [VolumeReadOps]
+        y_axis: operations_per_second
+        unit: operations/s
+        aliases: [volume read ops, volume read iops, block read ops]
+      volume_write_ops:
+        label: Volume write operations
+        metric_names: [VolumeWriteOps]
+        y_axis: operations_per_second
+        unit: operations/s
+        aliases: [volume write ops, volume write iops, block write ops]
+
+  oci_lbaas:
+    display_name: Load Balancer
+    resource_type: LoadBalancer
+    sdk_client: LoadBalancerClient
+    metrics:
+      lb_http_requests:
+        label: HTTP request count
+        metric_names: [HttpRequests]
+        y_axis: requests_per_second
+        unit: requests/s
+        aliases: [load balancer requests, lb requests, http requests, lb http]
+      lb_active_connections:
+        label: Active connections
+        metric_names: [ActiveConnections]
+        y_axis: connections
+        unit: count
+        aliases: [load balancer connections, lb connections, active connections, lb active]
+      lb_bandwidth:
+        label: Load balancer bandwidth
+        metric_names: [BytesReceived, BytesSent]
+        y_axis: bytes_per_second
+        unit: bytes/s
+        aliases: [load balancer bandwidth, lb bandwidth, lb bytes, lb throughput]
+
+  oci_database:
+    display_name: Database
+    resource_type: DbSystem
+    sdk_client: DatabaseClient
+    metrics:
+      db_cpu:
+        label: Database CPU utilization
+        metric_names: [CpuUtilization]
+        y_axis: cpu_utilization_percent
+        unit: percent
+        aliases: [database cpu, database cpu utilization, db cpu, db cpu utilization]
+      db_storage:
+        label: Database storage utilization
+        metric_names: [StorageUtilization]
+        y_axis: storage_utilization_percent
+        unit: percent
+        aliases: [database storage, db storage, db storage utilization, database disk]
+
+  oci_autonomous_database:
+    display_name: Autonomous Database
+    resource_type: AutonomousDatabase
+    sdk_client: DatabaseClient
+    metrics:
+      adb_cpu:
+        label: Autonomous DB CPU utilization
+        metric_names: [CpuUtilization]
+        y_axis: cpu_utilization_percent
+        unit: percent
+        aliases: [autonomous database cpu, autonomous db cpu, adb cpu, adb cpu utilization]
+      adb_storage:
+        label: Autonomous DB storage utilization
+        metric_names: [StorageUtilization]
+        y_axis: storage_utilization_percent
+        unit: percent
+        aliases: [autonomous database storage, autonomous db storage, adb storage]
+      adb_sessions:
+        label: Autonomous DB sessions
+        metric_names: [Sessions]
+        y_axis: session_count
+        unit: count
+        aliases: [autonomous database sessions, autonomous db sessions, adb sessions]
+
+  oci_objectstorage:
+    display_name: Object Storage
+    resource_type: Bucket
+    sdk_client: ObjectStorageClient
+    metrics:
+      bucket_size:
+        label: Bucket size
+        metric_names: [StoredBytes]
+        y_axis: bytes
+        unit: bytes
+        aliases: [bucket size, object storage size, bucket bytes, object storage bytes]
+      bucket_requests:
+        label: Bucket request count
+        metric_names: [AllRequests]
+        y_axis: request_count
+        unit: count
+        aliases: [bucket requests, object storage requests, bucket api calls]
+
+  oci_oke:
+    display_name: Container Engine for Kubernetes
+    resource_type: Cluster
+    sdk_client: ContainerEngineClient
+    metrics:
+      oke_node_cpu:
+        label: OKE node CPU utilization
+        metric_names: [CpuUtilization]
+        y_axis: cpu_utilization_percent
+        unit: percent
+        aliases: [oke cpu, oke cpu utilization, oke node cpu, kubernetes cpu, k8s cpu]
+      oke_node_memory:
+        label: OKE node memory utilization
+        metric_names: [MemoryUtilization]
+        y_axis: memory_utilization_percent
+        unit: percent
+        aliases: [oke memory, oke memory utilization, oke node memory, kubernetes memory, k8s memory]
+
+  oci_faas:
+    display_name: Functions
+    resource_type: Function
+    sdk_client: FunctionsManagementClient
+    metrics:
+      fn_invocations:
+        label: Function invocations
+        metric_names: [FunctionInvocationCount]
+        y_axis: invocation_count
+        unit: count
+        aliases: [function invocations, fn invocations, function calls, lambda invocations]
+      fn_duration:
+        label: Function duration
+        metric_names: [FunctionExecutionDuration]
+        y_axis: duration_ms
+        unit: ms
+        aliases: [function duration, fn duration, function execution time, function latency]
+      fn_errors:
+        label: Function errors
+        metric_names: [FunctionErrorCount]
+        y_axis: error_count
+        unit: count
+        aliases: [function errors, fn errors, function failures, function error count]
