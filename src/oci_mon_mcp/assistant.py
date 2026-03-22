@@ -467,47 +467,8 @@ class MonitoringAssistantService:
         if pending.get("kind") == "query":
             return self._resolve_query_pending(profile_id, profile, pending, answer)
 
-        if pending.get("kind") == "auth_fallback":
-            return self._resolve_auth_pending(profile_id, profile, pending, answer)
-
         self.repository.set_pending_clarification(profile_id, None)
         return None
-
-    def _resolve_auth_pending(
-        self,
-        profile_id: str,
-        profile: dict[str, Any],
-        pending: dict[str, Any],
-        answer: str,
-    ) -> AssistantResponse:
-        normalized = " ".join(answer.lower().split())
-        if normalized in {"yes", "y", "use config", "default", "ok"}:
-            self.repository.set_pending_clarification(profile_id, None)
-            config_response = self.configure_auth_fallback(profile_id=profile_id)
-        else:
-            path_match = re.search(r"(~?\/[^\s,]+config)", answer)
-            profile_match = re.search(r"profile\s*[:=]?\s*([A-Za-z0-9._-]+)", answer, re.IGNORECASE)
-            if path_match or profile_match:
-                self.repository.set_pending_clarification(profile_id, None)
-                config_path = path_match.group(1) if path_match else "~/.oci/config"
-                profile_name = profile_match.group(1) if profile_match else "DEFAULT"
-                config_response = self.configure_auth_fallback(
-                    profile_id=profile_id,
-                    config_path=config_path,
-                    profile_name=profile_name,
-                )
-            else:
-                self.repository.set_pending_clarification(profile_id, None)
-                return AssistantResponse(
-                    status="error",
-                    interpretation="Auth fallback was declined or could not be understood.",
-                    summary="Live OCI execution stopped because authentication could not be completed.",
-                )
-
-        original_query = pending.get("original_query", "")
-        if original_query:
-            return self.handle_query(original_query, profile_id=profile_id)
-        return config_response
 
     def _resolve_setup_pending(
         self,

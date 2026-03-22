@@ -250,6 +250,117 @@ class ServerIdentityTests(unittest.TestCase):
         self.assertEqual(change_response["status"], "needs_clarification")
         self.assertEqual(fake_service.calls, [("setup_default_context", "pilot_alice_codex")])
 
+    def test_auto_require_token_when_registry_non_empty(self) -> None:
+        """When REQUIRE_TOKEN env var is unset but registry has entries, tokens are required."""
+        with tempfile.TemporaryDirectory() as tempdir:
+            factory = RepositoryFactory(data_dir=Path(tempdir))
+            # Write a non-empty registry via the factory's save method
+            factory.save_registry({"tok123": {"profile_id": "p1", "user_id": "u1", "status": "active"}})
+            calls: list[str] = []
+
+            async def app(scope, receive, send):
+                calls.append("reached")
+                await send({"type": "http.response.start", "status": 200, "headers": []})
+                await send({"type": "http.response.body", "body": b"ok"})
+
+            middleware = IdentityMiddleware(
+                app,
+                repository_factory=factory,
+                streamable_path="/mcp",
+            )
+
+            async def invoke() -> list[dict[str, object]]:
+                messages: list[dict[str, object]] = []
+
+                async def receive():
+                    return {"type": "http.request", "body": b"", "more_body": False}
+
+                async def send(message):
+                    messages.append(message)
+
+                await middleware(
+                    {
+                        "type": "http",
+                        "method": "POST",
+                        "path": "/mcp",
+                        "query_string": b"",
+                        "headers": [],
+                    },
+                    receive,
+                    send,
+                )
+                return messages
+
+            # Ensure REQUIRE_TOKEN is NOT set
+            env = {k: v for k, v in os.environ.items() if k != "OCI_MON_MCP_REQUIRE_TOKEN"}
+            with patch.dict(os.environ, env, clear=True):
+                messages = anyio.run(invoke)
+
+        # Should reject — registry is non-empty, no token provided
+        self.assertEqual(messages[0]["status"], 401)
+        self.assertEqual(calls, [])
+
+    def test_no_auto_require_token_when_registry_empty(self) -> None:
+        """When REQUIRE_TOKEN env var is unset and registry is empty, requests pass through."""
+        with tempfile.TemporaryDirectory() as tempdir:
+            factory = RepositoryFactory(data_dir=Path(tempdir))
+            calls: list[str] = []
+
+            async def app(scope, receive, send):
+                calls.append("reached")
+                await send({"type": "http.response.start", "status": 200, "headers": []})
+                await send({"type": "http.response.body", "body": b"ok"})
+
+            middleware = IdentityMiddleware(
+                app,
+                repository_factory=factory,
+                streamable_path="/mcp",
+            )
+
+            async def invoke() -> list[dict[str, object]]:
+                messages: list[dict[str, object]] = []
+
+                async def receive():
+                    return {"type": "http.request", "body": b"", "more_body": False}
+
+                async def send(message):
+                    messages.append(message)
+
+                await middleware(
+                    {
+                        "type": "http",
+                        "method": "POST",
+                        "path": "/mcp",
+                        "query_string": b"",
+                        "headers": [],
+                    },
+                    receive,
+                    send,
+                )
+                return messages
+
+            env = {k: v for k, v in os.environ.items() if k != "OCI_MON_MCP_REQUIRE_TOKEN"}
+            with patch.dict(os.environ, env, clear=True):
+                messages = anyio.run(invoke)
+
+        # Should pass through — no registry, no token requirement
+        self.assertEqual(messages[0]["status"], 200)
+        self.assertIn("reached", calls)
+
+    def test_invalid_token_logs_warning(self) -> None:
+        """Failed token lookups emit a warning log (without the token value)."""
+        with tempfile.TemporaryDirectory() as tempdir:
+            factory = RepositoryFactory(data_dir=Path(tempdir))
+            # Write registry with one valid token via factory
+            factory.save_registry({"valid_tok": {"profile_id": "p1", "user_id": "u1", "status": "active"}})
+
+            with self.assertLogs("oci_mon_mcp.repository", level="WARNING") as cm:
+                result = factory.resolve_token("bad_token_value")
+
+        self.assertIsNone(result)
+        self.assertTrue(any("Invalid token attempt" in msg for msg in cm.output))
+        # Token value must NOT appear in logs
+        self.assertFalse(any("bad_token_value" in msg for msg in cm.output))
 
 
 class ServerLoggingTests(unittest.TestCase):

@@ -70,7 +70,12 @@ class IdentityMiddleware:
 
         token_value = self._query_value(scope, "u")
         record = self.repository_factory.resolve_token(token_value)
-        require_token = os.getenv("OCI_MON_MCP_REQUIRE_TOKEN", "0") == "1"
+        explicit_setting = os.getenv("OCI_MON_MCP_REQUIRE_TOKEN")
+        if explicit_setting is not None:
+            require_token = explicit_setting == "1"
+        else:
+            # Auto-require tokens when a registry exists with active entries
+            require_token = bool(self.repository_factory.load_registry())
         if require_token and record is None:
             await self._send_json(send, 401, {"error": "Missing or invalid MCP user token."})
             return

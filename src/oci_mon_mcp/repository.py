@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import json
+import logging
 import os
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -13,6 +14,8 @@ import threading
 from typing import Any, Iterator
 
 from .identity import get_current_identity
+
+logger = logging.getLogger(__name__)
 
 try:
     import fcntl
@@ -510,10 +513,13 @@ class RepositoryFactory:
             return None
         record = self.load_registry().get(token)
         if not isinstance(record, dict):
+            logger.warning("Invalid token attempt (token not in registry)")
             return None
         if record.get("status") != "active":
+            logger.warning("Token attempt with inactive status for profile %s", record.get("profile_id", "unknown"))
             return None
         if not record.get("profile_id") or not record.get("user_id"):
+            logger.warning("Token attempt with missing profile_id or user_id")
             return None
         return deepcopy(record)
 
