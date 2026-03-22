@@ -116,13 +116,22 @@ class AuditLogger:
         handler.namer = _GzipNamer()
         handler.rotator = _GzipRotator(self.archive_dir)
 
-        self._logger = logging.getLogger(f"audit.{id(self)}")
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        self._handler = handler
+
+        self._logger = logging.getLogger("oci_mon_mcp.audit")
+        self._logger.addHandler(handler)
         self._logger.setLevel(logging.INFO)
         self._logger.propagate = False
-        # Avoid duplicate handlers on repeated instantiation
-        self._logger.handlers.clear()
-        handler.setFormatter(logging.Formatter("%(message)s"))
-        self._logger.addHandler(handler)
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def close(self) -> None:
+        """Remove this instance's handler from the shared logger."""
+        self._logger.removeHandler(self._handler)
+        self._handler.close()
 
     # ------------------------------------------------------------------
     # Public API

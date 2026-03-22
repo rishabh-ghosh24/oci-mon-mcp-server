@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import asdict
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from pathlib import Path
 
@@ -419,21 +422,39 @@ class MonitoringAssistantService:
         if not self._audit_logger:
             return
 
-        import time as _time
+        try:
+            import time as _time
 
-        from .audit import AuditEntry
-        from .identity import get_current_identity
+            from .audit import AuditEntry
+            from .identity import get_current_identity
 
-        total_ms = int((_time.monotonic() - start_time) * 1000)
-        identity = get_current_identity()
-        self._audit_logger.log(AuditEntry(
-            profile_id=profile_id,
-            user_id=identity.user_id if identity else "",
-            query_text=query,
-            resolved_intent=str(response.interpretation) if response.interpretation else "",
-            namespace=response.details.namespace if response.details else "",
-            timing={"total_ms": total_ms},
-        ))
+            total_ms = int((_time.monotonic() - start_time) * 1000)
+            identity = get_current_identity()
+
+            # Enrich with optional fields from response
+            metric_key = None
+            if response.details and response.details.metric:
+                metric_key = response.details.metric
+
+            result_row_count = None
+            if response.tables:
+                result_row_count = sum(len(t.rows) for t in response.tables)
+
+            artifact_generated = bool(response.artifacts)
+
+            self._audit_logger.log(AuditEntry(
+                profile_id=profile_id,
+                user_id=identity.user_id if identity else "",
+                query_text=query,
+                resolved_intent=str(response.interpretation) if response.interpretation else "",
+                namespace=response.details.namespace if response.details else "",
+                metric_key=metric_key,
+                result_row_count=result_row_count,
+                artifact_generated=artifact_generated,
+                timing={"total_ms": total_ms},
+            ))
+        except Exception:
+            logger.warning("Failed to write audit entry", exc_info=True)
 
     def _request_initial_context(self, profile_id: str, query: str) -> AssistantResponse:
         pending = {

@@ -429,6 +429,23 @@ class AuditLoggingTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
+    def test_audit_failure_does_not_crash_query(self) -> None:
+        """Verify that audit logging failure doesn't break the query."""
+        from unittest.mock import MagicMock
+
+        from oci_mon_mcp.audit import AuditLogger
+
+        broken_logger = MagicMock(spec=AuditLogger)
+        broken_logger.log.side_effect = IOError("disk full")
+        self.service._audit_logger = broken_logger
+
+        # This should NOT raise — audit failure is swallowed
+        response = self.service.handle_query(
+            query="show me cpu utilization for all instances in the last 1 hour",
+            profile_id=self.profile_id,
+        )
+        self.assertEqual(response.status, "success")
+
     def test_handle_query_creates_audit_entry(self) -> None:
         """Verify that handle_query produces an audit log entry with timing."""
         tmpdir = tempfile.mkdtemp()
@@ -452,6 +469,7 @@ class AuditLoggingTests(unittest.TestCase):
             self.assertIn("total_ms", record["timing"])
             self.assertEqual(record["profile_id"], self.profile_id)
         finally:
+            audit_logger.close()
             shutil.rmtree(tmpdir, ignore_errors=True)
 
 

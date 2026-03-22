@@ -96,4 +96,5 @@ class AuditLoggerTests(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+        self.logger.close()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
