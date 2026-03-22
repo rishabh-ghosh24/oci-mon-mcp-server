@@ -30,6 +30,12 @@ THRESHOLD_NO_MATCH_LIMIT = 5
 _DEFAULT_INSTANCE_CACHE_TTL = 900  # 15 minutes
 
 
+def _build_timing(api_timings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build a timing summary dict from individual API call timings."""
+    total = sum(t.get("duration_ms", 0) for t in api_timings)
+    return {"oci_api_calls": api_timings, "total_api_ms": total}
+
+
 class _InstanceCache:
     """Thread-safe instance listing cache with stale-while-revalidate."""
 
@@ -154,7 +160,15 @@ class OciSdkExecutionAdapter:
             ]
 
         # Merge metric results into streams (sequential — no lock needed)
-        for metric_name, metric_data_list in metric_results:
+        api_timings: list[dict[str, Any]] = []
+        for result_tuple in metric_results:
+            if len(result_tuple) == 3:
+                metric_name, metric_data_list, call_timing = result_tuple
+                api_timings.append(call_timing)
+            else:
+                metric_name, metric_data_list = result_tuple
+        # Re-iterate for data merging
+        for metric_name, metric_data_list, *_ in metric_results:
             for metric_data in metric_data_list:
                 dimensions = metric_data.dimensions or {}
                 resource_id = dimensions.get("resourceId") or dimensions.get("resourceDisplayName")
@@ -234,6 +248,7 @@ class OciSdkExecutionAdapter:
                         instance_names={row.get("instance_name") for row in top_rows},
                     )[:THRESHOLD_NO_MATCH_LIMIT],
                     no_match_highest=highest,
+                    timing=_build_timing(api_timings),
                 )
             rows = matched
             chart_series = self._filter_chart_series(
@@ -255,7 +270,7 @@ class OciSdkExecutionAdapter:
                 f"Found {len(rows)} compute instances for {metric_label} in "
                 f"{request.compartment_name} over the last {request.parsed_query.time_range}."
             )
-        return ExecutionResult(summary=summary, rows=rows, chart_series=chart_series)
+        return ExecutionResult(summary=summary, rows=rows, chart_series=chart_series, timing=_build_timing(api_timings))
 
     def _fetch_metric(
         self,
@@ -266,7 +281,7 @@ class OciSdkExecutionAdapter:
         start_time: datetime,
         end_time: datetime,
         include_subtree: bool,
-    ) -> tuple[str, list[Any]]:
+    ) -> tuple[str, list[Any], dict[str, Any]]:
         """Fetch a single metric from OCI Monitoring. Thread-safe."""
         metric_name = query_text.split("[", 1)[0]
         details = oci.monitoring.models.SummarizeMetricsDataDetails(
@@ -282,6 +297,7 @@ class OciSdkExecutionAdapter:
         }
         if include_subtree:
             summarize_kwargs["compartment_id_in_subtree"] = True
+        start = time.monotonic()
         try:
             response = session.monitoring_client.summarize_metrics_data(**summarize_kwargs)
         except Exception as exc:
@@ -290,7 +306,14 @@ class OciSdkExecutionAdapter:
                 response = session.monitoring_client.summarize_metrics_data(**summarize_kwargs)
             else:
                 raise
-        return metric_name, response.data
+        duration_ms = int((time.monotonic() - start) * 1000)
+        timing_info = {
+            "api": "SummarizeMetricsData",
+            "namespace": request.parsed_query.namespace,
+            "metric": metric_name,
+            "duration_ms": duration_ms,
+        }
+        return metric_name, response.data, timing_info
 
     def _refresh_instance_cache(
         self,

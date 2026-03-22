@@ -341,5 +341,55 @@ class OciSdkExecutionAdapterTests(unittest.TestCase):
         self.assertAlmostEqual(rows[0]["memory_mean_value"], 75.0)
 
 
+    def test_execution_result_includes_timing_field(self):
+        from oci_mon_mcp.models import ExecutionResult
+        result = ExecutionResult(
+            summary="test",
+            rows=[],
+            chart_series=[],
+            timing={
+                "oci_api_calls": [
+                    {"api": "SummarizeMetricsData", "namespace": "oci_computeagent", "duration_ms": 4800},
+                ],
+                "total_api_ms": 4800,
+            },
+        )
+        self.assertIn("oci_api_calls", result.timing)
+        self.assertEqual(result.timing["oci_api_calls"][0]["duration_ms"], 4800)
+
+    def test_execute_populates_timing_in_result(self) -> None:
+        """Verify that execute() returns timing info with API call durations."""
+        instances = [
+            SimpleNamespace(
+                id="ocid1.instance.oc1..1",
+                display_name="app-01",
+                lifecycle_state="RUNNING",
+                compartment_id="ocid1.compartment.oc1..prod",
+            )
+        ]
+        cpu_streams = [
+            metric_stream(
+                instance_id="ocid1.instance.oc1..1",
+                instance_name="app-01",
+                compartment_id="ocid1.compartment.oc1..prod",
+                timestamp="2026-03-17T10:59:00Z",
+                value=70.0,
+            ),
+        ]
+        adapter = OciSdkExecutionAdapter(
+            client_factory=FakeClientFactory(datasets={"CpuUtilization": cpu_streams}, instances=instances)
+        )
+        result = adapter.execute(self._request(threshold=80.0))
+        self.assertIn("oci_api_calls", result.timing)
+        self.assertEqual(len(result.timing["oci_api_calls"]), 1)
+        call = result.timing["oci_api_calls"][0]
+        self.assertEqual(call["api"], "SummarizeMetricsData")
+        self.assertEqual(call["namespace"], "oci_computeagent")
+        self.assertEqual(call["metric"], "CpuUtilization")
+        self.assertIsInstance(call["duration_ms"], int)
+        self.assertGreaterEqual(call["duration_ms"], 0)
+        self.assertIn("total_api_ms", result.timing)
+
+
 if __name__ == "__main__":
     unittest.main()

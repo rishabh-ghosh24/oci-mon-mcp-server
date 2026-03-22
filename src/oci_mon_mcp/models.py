@@ -207,3 +207,4 @@ class ExecutionResult:
     artifacts: list[ArtifactLink] = field(default_factory=list)
     missing_resources: list[str] = field(default_factory=list)
     no_match_highest: dict[str, Any] | None = None
+    timing: dict[str, Any] = field(default_factory=dict)
