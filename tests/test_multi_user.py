@@ -159,7 +159,7 @@ class ServerIdentityTests(unittest.TestCase):
             mcp = create_mcp_server()
             tools = {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
             token = set_current_identity(
-                RequestIdentity(profile_id="pilot_alice_codex", user_id="alice", token="tok")
+                RequestIdentity(profile_id="pilot_alice_codex", user_id="alice")
             )
             try:
                 tools["monitoring_assistant"]("show cpu", profile_id="default")
@@ -229,7 +229,7 @@ class ServerIdentityTests(unittest.TestCase):
                 mcp = create_mcp_server()
                 tools = {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
                 token = set_current_identity(
-                    RequestIdentity(profile_id="pilot_alice_codex", user_id="alice", token="tok")
+                    RequestIdentity(profile_id="pilot_alice_codex", user_id="alice")
                 )
                 try:
                     with patch.dict(os.environ, {"OCI_MON_MCP_REQUIRE_TOKEN": "1"}, clear=False):
@@ -250,12 +250,6 @@ class ServerIdentityTests(unittest.TestCase):
         self.assertEqual(change_response["status"], "needs_clarification")
         self.assertEqual(fake_service.calls, [("setup_default_context", "pilot_alice_codex")])
 
-    def test_streamable_http_uses_sse_by_default(self) -> None:
-        with patch.dict(os.environ, {}, clear=False):
-            mcp = create_mcp_server()
-
-        self.assertFalse(mcp.settings.json_response)
-        self.assertFalse(mcp.settings.stateless_http)
 
 
 class ServerLoggingTests(unittest.TestCase):

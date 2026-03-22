@@ -39,6 +39,7 @@ logs/
 tmp/
 .tmp/
 data/artifacts/
+.artifacts/
 data/runtime/
 data/query_templates.json
 data/user_memory.json

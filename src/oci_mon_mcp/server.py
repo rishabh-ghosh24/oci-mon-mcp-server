@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import json
 import logging
 import os
 import sys
@@ -80,7 +81,6 @@ class IdentityMiddleware:
                 RequestIdentity(
                     profile_id=str(record["profile_id"]),
                     user_id=str(record["user_id"]),
-                    token=token_value,
                     client_type=str(record.get("client_type", "")) or None,
                 )
             )
@@ -109,11 +109,7 @@ class IdentityMiddleware:
 
     @staticmethod
     async def _send_json(send: Any, status_code: int, payload: dict[str, Any]) -> None:
-        body = (
-            "{\n"
-            + f'  "error": "{payload.get("error", "Unauthorized")}"\n'
-            + "}\n"
-        ).encode("utf-8")
+        body = json.dumps(payload).encode("utf-8")
         await send(
             {
                 "type": "http.response.start",

@@ -12,7 +12,6 @@ class RequestIdentity:
 
     profile_id: str
     user_id: str
-    token: str | None = None
     client_type: str | None = None
 
 

@@ -61,6 +61,11 @@ class _InstanceCache:
             self._refreshing.add(key)
             return True
 
+    def clear_refreshing(self, key: tuple) -> None:
+        """Remove a key from the refreshing set (e.g. on refresh failure)."""
+        with self._lock:
+            self._refreshing.discard(key)
+
 
 class OciSdkExecutionAdapter:
     """Execute Monitoring queries through the OCI Python SDK."""
@@ -308,8 +313,7 @@ class OciSdkExecutionAdapter:
         except Exception:
             logger.warning("Background instance cache refresh failed for %s", cache_key, exc_info=True)
             # Clear refreshing flag so next query retries
-            with self._instance_cache._lock:
-                self._instance_cache._refreshing.discard(cache_key)
+            self._instance_cache.clear_refreshing(cache_key)
 
     def _is_non_tenancy_subtree_error(self, exc: Exception) -> bool:
         message = str(exc)
