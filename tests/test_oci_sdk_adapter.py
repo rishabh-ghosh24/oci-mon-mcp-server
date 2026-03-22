@@ -241,5 +241,105 @@ class OciSdkExecutionAdapterTests(unittest.TestCase):
         self.assertEqual([series.name for series in result.chart_series], ["app-01", "app-02"])
 
 
+    def _make_adapter(self) -> OciSdkExecutionAdapter:
+        return OciSdkExecutionAdapter(
+            client_factory=FakeClientFactory(datasets={}, instances=[])
+        )
+
+    def test_generic_dual_metric_normalization(self) -> None:
+        """Verify dual-metric normalization works for non-cpu_memory metrics."""
+        parsed = ParsedQuery(
+            intent="threshold",
+            metric_key="lb_bandwidth",
+            metric_label="Load balancer bandwidth",
+            namespace="oci_lbaas",
+            metric_names=["BytesReceived", "BytesSent"],
+            time_range="1h",
+            interval="5m",
+            aggregation="mean",
+            source_query="show lb bandwidth",
+        )
+        request = QueryExecutionRequest(
+            parsed_query=parsed,
+            profile_id="default",
+            region="us-ashburn-1",
+            compartment_name="test",
+            compartment_id="ocid1.compartment.oc1..test",
+        )
+        streams = {
+            "ocid1.lb.test": {
+                "instance_name": "test-lb",
+                "instance_ocid": "ocid1.lb.test",
+                "compartment": "test-compartment",
+                "lifecycle_state": "ACTIVE",
+                "time_created": "2026-01-01",
+                "points": {
+                    "BytesReceived": [
+                        ("2024-04-01T12:00:00+00:00", 1000.0),
+                        ("2024-04-01T13:00:00+00:00", 2000.0),
+                    ],
+                    "BytesSent": [
+                        ("2024-04-01T12:00:00+00:00", 500.0),
+                        ("2024-04-01T13:00:00+00:00", 800.0),
+                    ],
+                },
+            }
+        }
+        adapter = self._make_adapter()
+        rows, chart_series = adapter._normalize_results(request, streams)
+        self.assertEqual(len(rows), 1)
+        # Generic dual-metric path should use metric-name-derived keys
+        self.assertIn("bytesreceived_mean_value", rows[0])
+        self.assertIn("bytessent_mean_value", rows[0])
+
+    def test_cpu_memory_uses_metric_names_from_query(self) -> None:
+        """Verify cpu_memory path uses parsed metric_names, not hardcoded strings."""
+        parsed = ParsedQuery(
+            intent="threshold",
+            metric_key="cpu_memory",
+            metric_label="CPU & Memory",
+            namespace="oci_computeagent",
+            metric_names=["CpuUtilization", "MemoryUtilization"],
+            time_range="1h",
+            interval="5m",
+            aggregation="mean",
+            source_query="show cpu and memory",
+        )
+        request = QueryExecutionRequest(
+            parsed_query=parsed,
+            profile_id="default",
+            region="us-ashburn-1",
+            compartment_name="test",
+            compartment_id="ocid1.compartment.oc1..test",
+        )
+        streams = {
+            "ocid1.instance.test": {
+                "instance_name": "test-vm",
+                "instance_ocid": "ocid1.instance.test",
+                "compartment": "test-compartment",
+                "lifecycle_state": "RUNNING",
+                "time_created": "2026-01-01",
+                "points": {
+                    "CpuUtilization": [
+                        ("2024-04-01T12:00:00+00:00", 50.0),
+                        ("2024-04-01T13:00:00+00:00", 60.0),
+                    ],
+                    "MemoryUtilization": [
+                        ("2024-04-01T12:00:00+00:00", 70.0),
+                        ("2024-04-01T13:00:00+00:00", 80.0),
+                    ],
+                },
+            }
+        }
+        adapter = self._make_adapter()
+        rows, chart_series = adapter._normalize_results(request, streams)
+        self.assertEqual(len(rows), 1)
+        # Backward-compat keys must still be present
+        self.assertIn("cpu_mean_value", rows[0])
+        self.assertIn("memory_mean_value", rows[0])
+        self.assertAlmostEqual(rows[0]["cpu_mean_value"], 55.0)
+        self.assertAlmostEqual(rows[0]["memory_mean_value"], 75.0)
+
+
 if __name__ == "__main__":
     unittest.main()

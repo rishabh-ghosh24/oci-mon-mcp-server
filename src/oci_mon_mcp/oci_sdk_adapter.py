@@ -407,8 +407,10 @@ class OciSdkExecutionAdapter:
         aggregation = request.parsed_query.aggregation
         for stream in streams.values():
             if request.parsed_query.metric_key == "cpu_memory":
-                cpu_points = stream["points"].get("CpuUtilization", [])
-                memory_points = stream["points"].get("MemoryUtilization", [])
+                # Backward-compat path: use metric_names from query (not hardcoded)
+                metric_names = request.parsed_query.metric_names
+                cpu_points = stream["points"].get(metric_names[0], [])
+                memory_points = stream["points"].get(metric_names[1], [])
                 if not cpu_points or not memory_points:
                     continue
                 cpu_stats = self._compute_metric_stats(cpu_points)
@@ -433,6 +435,43 @@ class OciSdkExecutionAdapter:
                     "cpu_latest_value": cpu_stats["latest_value"],
                     "memory_latest_value": memory_stats["latest_value"],
                     "aggregated_value": cpu_agg + memory_agg,
+                    "time_of_aggregate": None,
+                    "recommendation": "",
+                }
+                rows.append(row)
+                continue
+
+            # Generic dual-metric path for new namespaces
+            if len(request.parsed_query.metric_names) == 2 and request.parsed_query.metric_key != "cpu_memory":
+                metric_names = request.parsed_query.metric_names
+                m0_name = metric_names[0]
+                m1_name = metric_names[1]
+                m0_points = stream["points"].get(m0_name, [])
+                m1_points = stream["points"].get(m1_name, [])
+                if not m0_points or not m1_points:
+                    continue
+                m0_stats = self._compute_metric_stats(m0_points)
+                m1_stats = self._compute_metric_stats(m1_points)
+                if m0_stats is None or m1_stats is None:
+                    continue
+                m0_agg = self._value_for_aggregation(m0_stats, aggregation)
+                m1_agg = self._value_for_aggregation(m1_stats, aggregation)
+                row = {
+                    "instance_name": stream["instance_name"],
+                    "instance_ocid": stream["instance_ocid"],
+                    "compartment": stream["compartment"],
+                    "lifecycle_state": stream["lifecycle_state"],
+                    "time_created": stream["time_created"],
+                    "metric": request.parsed_query.metric_label,
+                    "threshold": request.parsed_query.threshold,
+                    "aggregation": aggregation,
+                    f"{m0_name.lower()}_mean_value": m0_stats["mean_value"],
+                    f"{m1_name.lower()}_mean_value": m1_stats["mean_value"],
+                    f"{m0_name.lower()}_max_value": m0_stats["max_value"],
+                    f"{m1_name.lower()}_max_value": m1_stats["max_value"],
+                    f"{m0_name.lower()}_latest_value": m0_stats["latest_value"],
+                    f"{m1_name.lower()}_latest_value": m1_stats["latest_value"],
+                    "aggregated_value": m0_agg + m1_agg,
                     "time_of_aggregate": None,
                     "recommendation": "",
                 }
