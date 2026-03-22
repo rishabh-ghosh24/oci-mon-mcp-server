@@ -199,9 +199,22 @@ The parser/interpreter must support:
 - named-instance trend queries
 
 ### 6.2 Supported Metrics
-- CPU
-- memory
-- disk I/O, after clarification
+Metrics are registry-driven via `data/metric_registry.yaml`. The registry currently covers 9
+namespaces:
+
+1. `oci_computeagent` — CPU, memory, disk I/O (throughput and IOPS)
+2. `oci_vcn` — network bytes and packets (in/out)
+3. `oci_blockstore` — volume throughput and operations (read/write)
+4. `oci_lbaas` — HTTP requests, active connections, bandwidth
+5. `oci_database` — database CPU and storage utilization
+6. `oci_autonomous_database` — autonomous DB CPU, storage, sessions
+7. `oci_objectstorage` — bucket size and request count
+8. `oci_oke` — OKE node CPU and memory utilization
+9. `oci_faas` — function invocations, duration, errors
+
+The registry is extensible: add entries to `data/metric_registry.yaml` or override the path with
+the `OCI_MON_MCP_METRIC_REGISTRY_PATH` environment variable. Namespaces not in the static registry
+fall back to runtime discovery via the OCI ListMetrics API.
 
 ### 6.3 Special Interpretation Rules
 - `show me all compute instances with CPU utilization above 80% in the last 1 hour` should map to
@@ -314,8 +327,22 @@ Suggested TTL:
 
 ## 10. Metric Mapping Requirements
 
-### 10.1 Baseline Metric Meanings
-Prototype metric interpretation should map to well-known OCI Monitoring metrics:
+### 10.1 Registry-Driven Metric Mappings
+Metric interpretation is driven by the metric registry (`data/metric_registry.yaml`), not
+hardcoded mappings. The registry defines namespace-to-metric mappings, natural-language aliases,
+units, and axis labels for each metric key.
+
+The registry currently supports 9 OCI namespaces (see section 6.2 for the full list). Each
+namespace entry specifies:
+- `display_name` — human-readable service name
+- `resource_type` — OCI resource type
+- `sdk_client` — OCI SDK client class
+- `metrics` — map of metric keys to metric names, aliases, units, and chart labels
+
+The registry path can be overridden with `OCI_MON_MCP_METRIC_REGISTRY_PATH`. After editing the
+registry YAML, restart the server for changes to take effect.
+
+For compute flows, the baseline mappings remain:
 - namespace: `oci_computeagent`
 - CPU -> `CpuUtilization`
 - memory -> `MemoryUtilization`

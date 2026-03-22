@@ -2,6 +2,26 @@
 
 Common issues and solutions for the OCI Monitoring MCP Server.
 
+## My metric or namespace isn't recognized
+
+The server uses a metric registry (`data/metric_registry.yaml`) to map natural-language metric names to OCI Monitoring namespaces and metric names.
+
+**Solutions:**
+- Check if the namespace is listed in `data/metric_registry.yaml`
+- If the namespace is not in the static registry, the server will attempt runtime discovery via the OCI ListMetrics API
+- Ensure the namespace name matches OCI's namespace exactly (e.g., `oci_computeagent`, `oci_vcn`, not `computeagent` or `vcn`)
+- After adding a namespace to the registry YAML, restart the server: `sudo systemctl restart oci-mon-mcp-server`
+- You can override the registry path with the `OCI_MON_MCP_METRIC_REGISTRY_PATH` environment variable
+
+## My compute instance doesn't appear in results
+
+Instance cache has a 15-minute TTL with stale-while-revalidate. New instances will appear within 15 minutes of creation. The cache refreshes in the background — the first query after TTL expires serves stale data while refreshing.
+
+**Solutions:**
+- Wait up to 15 minutes for the cache to refresh automatically
+- Restart the server to clear the cache: `sudo systemctl restart oci-mon-mcp-server`
+- Adjust the TTL via `OCI_MON_MCP_INSTANCE_CACHE_TTL` (in seconds, default: `900`)
+
 ## I don't see my new compute instance in results
 
 The server caches compute instance listings for **15 minutes** (stale-while-revalidate). A newly created or deleted instance may not appear immediately.
@@ -132,6 +152,7 @@ Result correctness (max, avg, latest values) is not affected — OCI computes ag
 
 | Variable | Default | Description |
 |---|---|---|
+| `OCI_MON_MCP_METRIC_REGISTRY_PATH` | `data/metric_registry.yaml` | Path to metric registry YAML |
 | `OCI_MON_MCP_INSTANCE_CACHE_TTL` | `900` | Instance listing cache TTL in seconds |
 | `OCI_MON_MCP_ARTIFACT_PORT` | `8765` | Artifact HTTP server port |
 | `OCI_MON_MCP_ARTIFACT_HOST` | `0.0.0.0` | Artifact HTTP server bind address |
