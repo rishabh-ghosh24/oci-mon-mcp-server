@@ -464,6 +464,52 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         self.assertIn("app-01", response.interpretation)
         self.assertNotIn("in the last 1 hour", response.interpretation)
 
+    def test_vcn_network_query_resolves_from_registry(self) -> None:
+        """Verify the assistant resolves a VCN namespace query via registry."""
+        self.service.setup_default_context(
+            region="us-ashburn-1",
+            compartment_name="prod-observability",
+        )
+        response = self.service.handle_query(
+            query="show me network bytes in for all instances in the last 1 hour",
+        )
+        # Should at least be recognized as a valid query (not rejected as unknown)
+        self.assertIn(response.status, ("success", "needs_clarification"))
+
+    def test_build_parsed_query_uses_registry_entry(self) -> None:
+        """Verify _build_parsed_query reads from the metric registry."""
+        self.service.setup_default_context(
+            region="us-ashburn-1",
+            compartment_name="prod-observability",
+        )
+        # Build a parsed query for cpu — should use registry
+        parsed = self.service._build_parsed_query(
+            source_query="test",
+            intent="threshold",
+            metric_key="cpu",
+            time_range="1h",
+            threshold=80.0,
+        )
+        self.assertEqual(parsed.namespace, "oci_computeagent")
+        self.assertEqual(parsed.metric_names, ["CpuUtilization"])
+        self.assertEqual(parsed.metric_label, "CPU utilization")
+
+    def test_build_parsed_query_vcn_metric(self) -> None:
+        """Verify _build_parsed_query works for a VCN metric key."""
+        self.service.setup_default_context(
+            region="us-ashburn-1",
+            compartment_name="prod-observability",
+        )
+        parsed = self.service._build_parsed_query(
+            source_query="test",
+            intent="top_n",
+            metric_key="vcn_bytes_in",
+            time_range="1h",
+        )
+        self.assertEqual(parsed.namespace, "oci_vcn")
+        self.assertEqual(parsed.metric_names, ["VnicFromNetworkBytes"])
+        self.assertEqual(parsed.metric_label, "Network bytes received")
+
     def test_preference_is_scoped_to_profile_until_promoted(self) -> None:
         repository = JsonRepository(data_dir=Path(self.tempdir.name) / "shared-preferences")
 

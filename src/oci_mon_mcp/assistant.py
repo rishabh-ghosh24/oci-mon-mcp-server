@@ -7,6 +7,8 @@ import re
 from dataclasses import asdict
 from typing import Any
 
+from pathlib import Path
+
 from .artifacts import ArtifactManager
 from .errors import (
     AuthFallbackSuggestedError,
@@ -15,6 +17,7 @@ from .errors import (
     InstanceResolutionError,
 )
 from .execution import MonitoringExecutionAdapter, build_default_execution_adapter
+from .metric_registry import MetricRegistry
 from .models import (
     AssistantDetails,
     AssistantResponse,
@@ -37,39 +40,6 @@ SUPPORTED_TIME_RANGES: dict[str, str] = {
     "6h": "5m",
     "24h": "1h",
     "7d": "1d",
-}
-
-METRIC_CONFIGS: dict[str, dict[str, Any]] = {
-    "cpu": {
-        "label": "CPU utilization",
-        "namespace": "oci_computeagent",
-        "metric_names": ["CpuUtilization"],
-        "y_axis": "cpu_utilization_percent",
-    },
-    "memory": {
-        "label": "Memory utilization",
-        "namespace": "oci_computeagent",
-        "metric_names": ["MemoryUtilization"],
-        "y_axis": "memory_utilization_percent",
-    },
-    "cpu_memory": {
-        "label": "CPU and memory utilization",
-        "namespace": "oci_computeagent",
-        "metric_names": ["CpuUtilization", "MemoryUtilization"],
-        "y_axis": "utilization_percent",
-    },
-    "disk_io_throughput": {
-        "label": "Disk I/O throughput",
-        "namespace": "oci_computeagent",
-        "metric_names": ["DiskBytesRead", "DiskBytesWritten"],
-        "y_axis": "disk_io_bytes",
-    },
-    "disk_io_iops": {
-        "label": "Disk I/O IOPS",
-        "namespace": "oci_computeagent",
-        "metric_names": ["DiskIopsRead", "DiskIopsWritten"],
-        "y_axis": "disk_io_iops",
-    },
 }
 
 NEW_QUERY_HINTS = (
@@ -97,6 +67,7 @@ class MonitoringAssistantService:
         execution_adapter: MonitoringExecutionAdapter | None = None,
         context_resolver: OciContextResolver | None = None,
         artifact_manager: ArtifactManager | None = None,
+        metric_registry: MetricRegistry | None = None,
     ) -> None:
         self.repository = repository or JsonRepository()
         self.execution_adapter = execution_adapter or build_default_execution_adapter()
@@ -107,6 +78,12 @@ class MonitoringAssistantService:
             port=int(os.getenv("OCI_MON_MCP_ARTIFACT_PORT", "8765")),
             auto_start=os.getenv("OCI_MON_MCP_ARTIFACTS_ENABLED", "1") != "0",
         )
+        if metric_registry is not None:
+            self._registry = metric_registry
+        else:
+            default_path = Path(__file__).parent.parent.parent / "data" / "metric_registry.yaml"
+            registry_path = os.getenv("OCI_MON_MCP_METRIC_REGISTRY_PATH", str(default_path))
+            self._registry = MetricRegistry.from_yaml(registry_path)
 
     def setup_default_context(
         self,
@@ -618,18 +595,29 @@ class MonitoringAssistantService:
         last_context = profile.get("last_resolved_context", {})
         aggregation = self._extract_aggregation(normalized)
 
-        if any(token in normalized for token in ("database", "vcn", "anomal", "alert")):
+        if any(token in normalized for token in ("anomal", "alert")):
             return AssistantResponse(
                 status="error",
                 interpretation=f"Interpreted as an out-of-scope prototype request: {query}",
                 summary=(
-                    "That request is outside the current compute-focused prototype scope. "
-                    "I can help with compute CPU, memory, named-instance trends, or disk I/O "
-                    "after clarification."
+                    "That request is outside the current prototype scope. "
+                    "I can help with compute CPU, memory, named-instance trends, disk I/O, "
+                    "and metrics from supported OCI namespaces."
                 ),
             )
 
         if "storage" in normalized:
+            # Check registry for specific storage metrics (db_storage, adb_storage, etc.)
+            registry_match = self._registry.resolve_by_alias(normalized)
+            if registry_match is not None:
+                return self._build_parsed_query(
+                    source_query=query,
+                    intent="top_n",
+                    metric_key=registry_match.metric_key,
+                    time_range=self._extract_time_range(normalized) or "1h",
+                    aggregation=aggregation,
+                    top_n=self._extract_top_n(normalized) or 10,
+                )
             return self._storage_not_available_response(profile)
 
         if " io" in f" {normalized}" or normalized.endswith("io") or "disk io" in normalized:
@@ -812,12 +800,24 @@ class MonitoringAssistantService:
                 top_n=requested_top_n,
             )
 
+        # Fall through: if _extract_metric resolved a registry metric, build a query for it
+        if metric_key is not None and self._registry.resolve(metric_key) is not None:
+            return self._build_parsed_query(
+                source_query=query,
+                intent="top_n",
+                metric_key=metric_key,
+                time_range=self._extract_time_range(normalized) or "1h",
+                aggregation=aggregation,
+                top_n=self._extract_top_n(normalized) or 10,
+            )
+
         return AssistantResponse(
             status="error",
             interpretation=f"Could not safely map the request into the supported prototype flows: {query}",
             summary=(
                 "I can currently help with compute CPU or memory threshold queries, top-N/worst "
-                "compute queries, named-instance trends, and disk I/O after clarification."
+                "compute queries, named-instance trends, disk I/O, and metrics from supported "
+                "OCI namespaces."
             ),
         )
 
@@ -1180,7 +1180,7 @@ class MonitoringAssistantService:
             title=f"{parsed.metric_label} trend",
             type="line",
             x_axis="time",
-            y_axis=METRIC_CONFIGS[parsed.metric_key]["y_axis"],
+            y_axis=self._registry.resolve(parsed.metric_key).y_axis,
             series=result.chart_series[:DEFAULT_CHART_LIMIT],
             threshold_line=threshold_line,
         )
@@ -1200,15 +1200,17 @@ class MonitoringAssistantService:
         io_direction: str | None = None,
         learned_intent_key: str | None = None,
     ) -> ParsedQuery:
-        config = METRIC_CONFIGS[metric_key]
-        metric_names = list(config["metric_names"])
+        entry = self._registry.resolve(metric_key)
+        if entry is None:
+            raise ValueError(f"Unknown metric_key: {metric_key}")
+        metric_names = list(entry.metric_names)
         if metric_key in {"disk_io_throughput", "disk_io_iops"} and io_direction in {"read", "write"}:
             metric_names = [metric_names[0] if io_direction == "read" else metric_names[1]]
         return ParsedQuery(
             intent=intent,
             metric_key=metric_key,
-            metric_label=config["label"],
-            namespace=config["namespace"],
+            metric_label=entry.label,
+            namespace=entry.namespace,
             metric_names=metric_names,
             time_range=time_range,
             interval=SUPPORTED_TIME_RANGES[time_range],
@@ -1539,6 +1541,10 @@ class MonitoringAssistantService:
             return "disk_io_throughput"
         if "iops" in normalized and "io" in normalized:
             return "disk_io_iops"
+        # Fall through to registry alias resolution for new namespaces
+        registry_match = self._registry.resolve_by_alias(normalized)
+        if registry_match is not None:
+            return registry_match.metric_key
         return None
 
     def _extract_threshold(self, text: str) -> float | None:
