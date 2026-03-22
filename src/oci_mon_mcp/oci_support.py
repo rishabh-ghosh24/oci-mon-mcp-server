@@ -121,6 +121,32 @@ class OciClientFactory:
         return session
 
 
+def list_metrics_for_namespace(
+    monitoring_client: Any,
+    compartment_id: str,
+    namespace: str,
+) -> list[dict[str, str]]:
+    """Call OCI ListMetrics to discover metrics for a given namespace.
+
+    Returns a deduplicated list of dicts with ``metric_name`` and ``unit`` keys.
+    """
+    details = monitoring_client.models.ListMetricsDetails(namespace=namespace)
+    response = monitoring_client.list_metrics(
+        compartment_id=compartment_id,
+        list_metrics_details=details,
+    )
+    seen: set[str] = set()
+    result: list[dict[str, str]] = []
+    for metric in response.data:
+        if metric.name not in seen:
+            seen.add(metric.name)
+            result.append({
+                "metric_name": metric.name,
+                "unit": getattr(metric, "unit", ""),
+            })
+    return result
+
+
 _DEFAULT_COMPARTMENT_CACHE_TTL = 900  # 15 minutes
 
 

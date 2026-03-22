@@ -130,6 +130,58 @@ class MetricRegistry:
         """Return metric keys belonging to a namespace."""
         return list(self._namespace_metrics.get(namespace, []))
 
+    # ------------------------------------------------------------------
+    # Runtime discovery
+    # ------------------------------------------------------------------
+
+    def register_discovered_namespace(
+        self,
+        namespace: str,
+        display_name: str,
+        metrics: list[dict[str, str]],
+    ) -> NamespaceInfo:
+        """Register a namespace discovered at runtime (e.g. via ListMetrics).
+
+        This allows namespaces not present in the static YAML to be used
+        for metric resolution after calling the OCI ListMetrics API.
+        """
+        ns_metric_keys: list[str] = []
+        new_alias_pairs: list[tuple[str, str]] = []
+
+        for m in metrics:
+            metric_name = m["metric_name"]
+            key = f"{namespace}__{metric_name}"
+            entry = MetricEntry(
+                metric_key=key,
+                label=f"{display_name} {metric_name}",
+                namespace=namespace,
+                metric_names=(metric_name,),
+                y_axis=metric_name.lower(),
+                aliases=(metric_name.lower(),),
+                unit=m.get("unit", ""),
+            )
+            self._entries[key] = entry
+            ns_metric_keys.append(key)
+            for alias in entry.aliases:
+                new_alias_pairs.append((alias.lower(), key))
+
+        # Merge new aliases into the existing index, keeping longest-first order.
+        self._alias_index = sorted(
+            self._alias_index + new_alias_pairs,
+            key=lambda pair: len(pair[0]),
+            reverse=True,
+        )
+
+        ns_info = NamespaceInfo(
+            namespace=namespace,
+            display_name=display_name,
+            resource_type="",
+            sdk_client="",
+        )
+        self._namespace_infos[namespace] = ns_info
+        self._namespace_metrics[namespace] = ns_metric_keys
+        return ns_info
+
     @property
     def all_metric_keys(self) -> list[str]:
         """Return all metric keys in the registry."""

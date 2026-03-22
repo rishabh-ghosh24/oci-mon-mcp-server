@@ -58,6 +58,23 @@ class MetricRegistryTests(unittest.TestCase):
         self.assertEqual(entry.metric_key, "db_cpu")
         self.assertEqual(entry.namespace, "oci_database")
 
+    def test_runtime_fallback_discovers_unknown_namespace(self):
+        registry = MetricRegistry.from_yaml("data/metric_registry.yaml")
+        discovered = registry.register_discovered_namespace(
+            namespace="oci_custom_namespace",
+            display_name="Custom Service",
+            metrics=[
+                {"metric_name": "CustomMetric1", "unit": "count"},
+                {"metric_name": "CustomMetric2", "unit": "percent"},
+            ],
+        )
+        self.assertIsNotNone(discovered)
+        self.assertEqual(discovered.namespace, "oci_custom_namespace")
+        entry = registry.resolve("oci_custom_namespace__CustomMetric1")
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.namespace, "oci_custom_namespace")
+        self.assertEqual(entry.metric_names, ("CustomMetric1",))
+
     def test_all_entries_have_required_fields(self):
         registry = MetricRegistry.from_yaml("data/metric_registry.yaml")
         for key in registry.all_metric_keys:
