@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +13,9 @@ from unittest.mock import patch
 
 import anyio
 
+from oci_mon_mcp.artifacts import ArtifactManager
+from oci_mon_mcp.assistant import MonitoringAssistantService
+from oci_mon_mcp.audit import AuditLogger
 from oci_mon_mcp.identity import RequestIdentity, reset_current_identity, set_current_identity
 from oci_mon_mcp.models import AssistantResponse
 from oci_mon_mcp.repository import JsonRepository, RepositoryFactory
@@ -389,6 +394,65 @@ class ServerLoggingTests(unittest.TestCase):
             exc_info=None,
         )
         self.assertTrue(filt.filter(record))
+
+
+class AuditLoggingTests(unittest.TestCase):
+    """Verify audit logging is wired into the assistant service."""
+
+    def setUp(self) -> None:
+        from tests.test_assistant import FakeContextResolver, FakeExecutionAdapter
+
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.profile_id = "pilot_audit_tester"
+        repository = JsonRepository(data_dir=Path(self.tempdir.name))
+        artifact_dir = Path(self.tempdir.name) / "artifacts"
+        self.service = MonitoringAssistantService(
+            repository=repository,
+            execution_adapter=FakeExecutionAdapter(),
+            context_resolver=FakeContextResolver(),
+            artifact_manager=ArtifactManager(
+                base_dir=artifact_dir,
+                base_url="http://127.0.0.1:9000",
+                auto_start=False,
+            ),
+        )
+        # Pre-configure so handle_query doesn't ask for setup
+        self.service.repository.set_default_context(
+            self.profile_id,
+            region="us-ashburn-1",
+            compartment_name="prod-observability",
+            compartment_id="ocid1.compartment.oc1..prod",
+            tenancy_id="ocid1.tenancy.oc1..test",
+            available_compartments=[],
+        )
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+
+    def test_handle_query_creates_audit_entry(self) -> None:
+        """Verify that handle_query produces an audit log entry with timing."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            log_path = Path(tmpdir) / "audit.log"
+            audit_logger = AuditLogger(log_path=log_path)
+            self.service._audit_logger = audit_logger
+
+            self.service.handle_query(
+                query="show me cpu utilization for all instances in the last 1 hour",
+                profile_id=self.profile_id,
+            )
+
+            self.assertTrue(log_path.exists())
+            with open(log_path) as f:
+                lines = f.readlines()
+            self.assertGreaterEqual(len(lines), 1)
+            record = json.loads(lines[-1])
+            self.assertIn("timestamp", record)
+            self.assertIn("timing", record)
+            self.assertIn("total_ms", record["timing"])
+            self.assertEqual(record["profile_id"], self.profile_id)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 if __name__ == "__main__":

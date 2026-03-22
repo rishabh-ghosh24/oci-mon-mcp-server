@@ -68,6 +68,7 @@ class MonitoringAssistantService:
         context_resolver: OciContextResolver | None = None,
         artifact_manager: ArtifactManager | None = None,
         metric_registry: MetricRegistry | None = None,
+        audit_logger: Any | None = None,
     ) -> None:
         self.repository = repository or JsonRepository()
         self.execution_adapter = execution_adapter or build_default_execution_adapter()
@@ -78,6 +79,7 @@ class MonitoringAssistantService:
             port=int(os.getenv("OCI_MON_MCP_ARTIFACT_PORT", "8765")),
             auto_start=os.getenv("OCI_MON_MCP_ARTIFACTS_ENABLED", "1") != "0",
         )
+        self._audit_logger = audit_logger
         if metric_registry is not None:
             self._registry = metric_registry
         else:
@@ -359,6 +361,10 @@ class MonitoringAssistantService:
 
     def handle_query(self, query: str, profile_id: str = "default") -> AssistantResponse:
         """Interpret a user query, ask clarifications, and dispatch execution."""
+        import time as _time
+
+        start_time = _time.monotonic()
+
         normalized_query = query.strip()
         if not normalized_query:
             return AssistantResponse(
@@ -377,11 +383,14 @@ class MonitoringAssistantService:
                 answer=normalized_query,
             )
             if pending_resolution is not None:
+                self._emit_audit(profile_id, query, pending_resolution, start_time)
                 return pending_resolution
 
         profile = self.repository.get_profile(profile_id)
         if not profile.get("region") or not profile.get("default_compartment_name"):
-            return self._request_initial_context(profile_id, normalized_query)
+            response = self._request_initial_context(profile_id, normalized_query)
+            self._emit_audit(profile_id, query, response, start_time)
+            return response
 
         parse_result = self._parse_query(
             query=normalized_query,
@@ -389,12 +398,42 @@ class MonitoringAssistantService:
             profile=profile,
         )
         if isinstance(parse_result, AssistantResponse):
+            self._emit_audit(profile_id, query, parse_result, start_time)
             return parse_result
-        return self._execute_parsed_query(
+        response = self._execute_parsed_query(
             profile_id=profile_id,
             profile=profile,
             parsed=parse_result,
         )
+        self._emit_audit(profile_id, query, response, start_time)
+        return response
+
+    def _emit_audit(
+        self,
+        profile_id: str,
+        query: str,
+        response: AssistantResponse,
+        start_time: float,
+    ) -> None:
+        """Write an audit entry if an audit logger is configured."""
+        if not self._audit_logger:
+            return
+
+        import time as _time
+
+        from .audit import AuditEntry
+        from .identity import get_current_identity
+
+        total_ms = int((_time.monotonic() - start_time) * 1000)
+        identity = get_current_identity()
+        self._audit_logger.log(AuditEntry(
+            profile_id=profile_id,
+            user_id=identity.user_id if identity else "",
+            query_text=query,
+            resolved_intent=str(response.interpretation) if response.interpretation else "",
+            namespace=response.details.namespace if response.details else "",
+            timing={"total_ms": total_ms},
+        ))
 
     def _request_initial_context(self, profile_id: str, query: str) -> AssistantResponse:
         pending = {

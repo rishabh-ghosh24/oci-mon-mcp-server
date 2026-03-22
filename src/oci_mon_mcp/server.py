@@ -7,9 +7,11 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Any
 
 from .assistant import MonitoringAssistantService
+from .audit import AuditLogger
 from .identity import (
     RequestIdentity,
     get_current_identity,
@@ -32,7 +34,12 @@ except ImportError:  # pragma: no cover - exercised by import fallback tests ins
 
 
 REPOSITORY_FACTORY = RepositoryFactory()
-SERVICE = MonitoringAssistantService(repository=JsonRepository(factory=REPOSITORY_FACTORY))
+_AUDIT_LOG_PATH = Path(REPOSITORY_FACTORY.data_dir) / "logs" / "audit.log"
+_AUDIT_LOGGER = AuditLogger(log_path=_AUDIT_LOG_PATH)
+SERVICE = MonitoringAssistantService(
+    repository=JsonRepository(factory=REPOSITORY_FACTORY),
+    audit_logger=_AUDIT_LOGGER,
+)
 
 
 class _ExpectedMcpAccessFilter(logging.Filter):
