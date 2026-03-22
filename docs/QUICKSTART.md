@@ -367,6 +367,8 @@ Formatting rules:
    - `show me all compute instances with CPU utilization above 80% in the last 1 hour`
 
 ## 10. Recommended Prototype Queries
+
+### Compute (baseline)
 - `show me all compute instances with CPU utilization above 80% in the last 1 hour`
 - `show me the worst performing compute instances`
 - `now do the same for memory`
@@ -374,7 +376,26 @@ Formatting rules:
 - `show me compute io`
 - `show CPU utilization across tenancy for last 1 hour`
 - `show CPU utilization in compartment ProdMgmt for last 24 hours`
-- `show CPU utilization in compartment ProdMgmt without subcompartments for last 1 hour`
+
+### Networking / VCN
+- `show network bytes in for all instances in the last 1 hour`
+- `show ingress traffic across tenancy`
+
+### Database
+- `show database CPU utilization for the last 24 hours`
+- `show autonomous DB sessions`
+
+### Load Balancer
+- `show HTTP requests on load balancers`
+- `show active connections for the last 1 hour`
+
+### OKE / Kubernetes
+- `show OKE node CPU utilization`
+- `show kubernetes memory usage`
+
+### Other
+- `show function invocations for the last 24 hours`
+- `show bucket size for object storage`
 
 ## 11. Expected Behavior
 - If region/compartment are not saved yet, the server asks for them.
@@ -397,10 +418,17 @@ The prototype persists local state under `data/`:
 
 ## 13. Operational Notes
 - Compute CPU and memory metrics require the Compute Instance Monitoring plugin to be enabled.
-- The prototype currently supports compute-focused flows only.
+- The server supports 9 OCI metric namespaces: `oci_computeagent`, `oci_vcn`, `oci_blockstore`,
+  `oci_lbaas`, `oci_database`, `oci_autonomous_database`, `oci_objectstorage`, `oci_oke`, `oci_faas`.
+- Metrics are driven by `data/metric_registry.yaml`. To add a new namespace or metric, edit the
+  YAML and restart the server. Override the registry path with `OCI_MON_MCP_METRIC_REGISTRY_PATH`.
+- Unknown namespaces not in the registry are auto-discovered at runtime via the OCI ListMetrics API.
 - `storage usage %` inside the instance is intentionally reported as unavailable from standard OCI
-  Monitoring metrics alone.
+  Monitoring metrics alone. Database and Object Storage metrics are available separately.
 - Disk I/O is supported after clarification.
+- **Audit logging**: every query is logged to `data/logs/audit.log` (JSONL format) with user identity,
+  query text, OCI API calls, and timing breakdown. Logs rotate at 50 MB (5 backups, gzip compressed).
+  Archives older than 90 days are eligible for cleanup via `AuditLogger.cleanup_archives()`.
 - If you see `does not appear to be a Python project`, you are running `pip install -e ...` outside
   the repository root.
 - If you see Python 3.9 in the virtualenv, recreate it with `python3.11 -m venv .venv`.
