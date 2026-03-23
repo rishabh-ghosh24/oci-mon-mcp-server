@@ -9,4 +9,5 @@
    - a direct clickable artifact URL as fallback.
 6. Show up to 10 result rows in responses by default.
 7. When total results exceed 10, add a clear note that the full result set can be downloaded as CSV.
-8. Every time repo files are changed, always provide a commit-ready Title and Summary for the user.
+8. Only when repo files are changed, provide a commit-ready Title and Summary for the user.
+9. Do not provide a commit-ready Title and Summary for read-only tasks, including monitoring queries, investigations, explanations, or other requests that do not modify repository files.
