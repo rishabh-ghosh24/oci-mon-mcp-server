@@ -1489,8 +1489,9 @@ class MonitoringAssistantService:
             )
         if parsed.intent == "worst_performing":
             return (
-                f"Interpreted as: show the worst-performing compute instances by {aggregation_phrase} {metric_phrase} "
-                f"in the last {parsed.time_range} in {scope_label}."
+                f"Interpreted as: show the worst-performing compute instances by {metric_phrase} "
+                f"in the last {parsed.time_range} in {scope_label}, "
+                f"ranked descending by recent {metric_phrase}."
             )
         return (
             f"Interpreted as: show compute instances ranked by {aggregation_phrase} {metric_phrase} in the last "
