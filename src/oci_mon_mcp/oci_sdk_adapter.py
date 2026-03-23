@@ -547,7 +547,10 @@ class OciSdkExecutionAdapter:
             ),
             reverse=True,
         )
-        if request.parsed_query.intent in {"top_n", "worst_performing"}:
+        if request.parsed_query.intent == "worst_performing":
+            # Sort by latest (current) value — "worst performing right now"
+            rows.sort(key=lambda row: row.get("latest_value", 0.0), reverse=True)
+        elif request.parsed_query.intent == "top_n":
             rows.sort(key=lambda row: row.get("aggregated_value", 0.0), reverse=True)
 
         chart_candidates.sort(key=lambda item: item[0], reverse=True)

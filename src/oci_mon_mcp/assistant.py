@@ -41,6 +41,7 @@ SUPPORTED_TIME_RANGES: dict[str, str] = {
     "30m": "1m",
     "1h": "5m",
     "6h": "5m",
+    "12h": "5m",
     "24h": "1h",
     "7d": "1d",
 }
@@ -1631,6 +1632,8 @@ class MonitoringAssistantService:
             "past hour": "1h",
             "last 6 hours": "6h",
             "past 6 hours": "6h",
+            "last 12 hours": "12h",
+            "past 12 hours": "12h",
             "last 24 hours": "24h",
             "past 24 hours": "24h",
             "last day": "24h",
@@ -1647,6 +1650,7 @@ class MonitoringAssistantService:
             "30m": "30m",
             "1h": "1h",
             "6h": "6h",
+            "12h": "12h",
             "24h": "24h",
             "7d": "7d",
         }
