@@ -414,15 +414,21 @@ Final generated query text may vary by flow, but it must always specify:
 - if the user explicitly asks for average, use `mean`
 
 ### 11.3 Query Interval Defaults
-- 15m, 30m, 1h -> 1m interval
-- 6h, 24h -> 5m interval
-- 7d -> 1h interval
-- adapt automatically if backend constraints require changes
+
+Any arbitrary time range is supported. Intervals are computed dynamically:
+
+- Up to 30 minutes → 1 min interval
+- 30 min – 1 hour → 5 min interval
+- 1 hour – 6 hours → 15 min interval
+- 6 hours – 24 hours → 1 hour interval
+- 24 hours – 48 hours → 2 hour interval
+- Over 48 hours → 1 day interval
 
 ### 11.4 Sorting Rules
 - if the result shape has a timestamp, sort newest first
 - otherwise sort by severity
-- threshold/top/worst-performing results use `time_of_max`
+- worst-performing results sort by `latest_value` (current utilization, not peak)
+- top-N results sort by `aggregated_value` (peak by default)
 - named-instance trend outputs use `latest_datapoint_time`
 
 ### 11.5 Instance Lookup and Metric Join Requirements

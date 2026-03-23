@@ -1714,16 +1714,25 @@ class MonitoringAssistantService:
             )
         )
 
+    _INSTANCE_NOISE_SUFFIXES = re.compile(
+        r"\s+(?:instance|instances|server|servers|host|hosts|node|nodes|vm|vms)$",
+        re.IGNORECASE,
+    )
+
     def _extract_instance_name(self, text: str) -> str | None:
         match = re.search(
-            r"(?:trend for|trend of)\s+(.+?)(?=\s+(?:for|over|during|across|within|"
+            r"(?:trend for|trend of)\s+(.+?)(?=\s+(?:instance|instances|server|host|node|vm|"
+            r"for|over|during|across|within|"
             r"in\s+the\s+last|last|in\s+compartment|from\s+compartment|compartment\b)\b|[?.!,]|$)",
             text,
             re.IGNORECASE,
         )
         if not match:
             return None
-        return match.group(1).strip().strip('"').strip("'")
+        name = match.group(1).strip().strip('"').strip("'")
+        # Strip trailing noise words like "instance", "server", "host"
+        name = self._INSTANCE_NOISE_SUFFIXES.sub("", name)
+        return name
 
     def _extract_io_type(self, text: str) -> str | None:
         normalized = text.lower()

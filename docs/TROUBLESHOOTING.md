@@ -116,18 +116,47 @@ Always use `--ff-only` for safe pulls that fail if there are conflicts rather th
 
 ## Chart data looks coarse / too few data points
 
-The server uses optimized intervals to balance chart detail with query performance:
+The server supports **any arbitrary time range** (e.g., "last 3 hours", "last 45 minutes", "last 2 days") and automatically selects the best OCI query interval based on the duration:
 
-| Time Range | Interval | Data Points |
+| Duration | Interval | Example data points |
 |---|---|---|
-| 15 minutes | 1 min | ~15 |
-| 30 minutes | 1 min | ~30 |
-| 1 hour | 5 min | ~12 |
-| 6 hours | 5 min | ~72 |
-| 24 hours | 1 hour | ~24 |
-| 7 days | 1 day | ~7 |
+| Up to 30 minutes | 1 min | ~30 |
+| 30 min – 1 hour | 5 min | ~12 |
+| 1 hour – 6 hours | 15 min | ~24 |
+| 6 hours – 24 hours | 1 hour | ~24 |
+| 24 hours – 48 hours | 2 hours | ~24 |
+| Over 48 hours | 1 day | varies |
 
 Result correctness (max, avg, latest values) is not affected — OCI computes aggregations at whatever interval is specified. Only the chart granularity changes.
+
+## "Worst performing" shows unexpected sort order
+
+The server sorts worst-performing results by **latest/current** utilization (most recent data point), not by peak/max. This shows which instances are struggling *right now*. If your LLM client re-sorts the table differently, check the "Latest %" column for the actual current values.
+
+## Named-instance queries fail with "No instance found"
+
+If you ask "Show CPU trend for my-instance" and get "No instance named X was found":
+
+1. **Check the instance name** — must match the OCI display name exactly (partial matches work too)
+2. **Check the compartment** — the instance must be in your default compartment. Try adding "across tenancy" to search all compartments
+3. **Avoid noise words** — the parser strips "instance", "server", "host", "node", "vm" from names automatically, but unusual phrasing may confuse it
+4. **Use quotes if needed** — try: `Show CPU trend for "my-instance-name" over the last 6 hours`
+
+## Audit logs — where are they?
+
+Audit logs are written to `data/logs/audit.log` in JSONL format (one JSON object per line). Log files rotate at 50 MB with 5 recent backups (gzip compressed). Archives older than 90 days are automatically cleaned up.
+
+To inspect recent queries:
+```bash
+# Last 10 audit entries
+tail -10 data/logs/audit.log | jq .
+
+# Find slow queries (over 10 seconds)
+cat data/logs/audit.log | jq 'select(.timing.total_ms > 10000)'
+
+# Find queries by a specific user
+cat data/logs/audit.log | jq 'select(.user_id == "alice")'
+```
 
 ## Environment Variables Reference
 

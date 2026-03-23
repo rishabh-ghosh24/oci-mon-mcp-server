@@ -464,6 +464,27 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         self.assertIn("app-01", response.interpretation)
         self.assertNotIn("in the last 1 hour", response.interpretation)
 
+    def test_extract_instance_name_strips_noise_word_instance(self) -> None:
+        """'trend for oci-mon-mcp instance over the last 12 hours' extracts 'oci-mon-mcp'."""
+        name = self.service._extract_instance_name(
+            "show CPU trend for oci-mon-mcp instance over the last 12 hours"
+        )
+        self.assertEqual(name, "oci-mon-mcp")
+
+    def test_extract_instance_name_strips_noise_word_server(self) -> None:
+        """'trend for web-app-01 server over the last 1 hour' extracts 'web-app-01'."""
+        name = self.service._extract_instance_name(
+            "show CPU trend for web-app-01 server over the last 1 hour"
+        )
+        self.assertEqual(name, "web-app-01")
+
+    def test_extract_instance_name_strips_noise_word_node(self) -> None:
+        """'trend for k8s-worker-03 node over the last 6 hours' extracts 'k8s-worker-03'."""
+        name = self.service._extract_instance_name(
+            "show CPU trend for k8s-worker-03 node over the last 6 hours"
+        )
+        self.assertEqual(name, "k8s-worker-03")
+
     def test_vcn_network_query_resolves_from_registry(self) -> None:
         """Verify the assistant resolves a VCN namespace query via registry."""
         self.service.setup_default_context(

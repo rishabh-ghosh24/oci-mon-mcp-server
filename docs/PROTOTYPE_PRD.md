@@ -115,13 +115,9 @@ On first use, the system must:
 
 ### 8.3 Time Defaults
 - Default time range when omitted: last 1 hour
-- Supported relative time ranges:
-  - last 15 minutes
-  - last 30 minutes
-  - last 1 hour
-  - last 6 hours
-  - last 24 hours
-  - last 7 days
+- **Any arbitrary duration is supported** — e.g., "last 3 hours", "last 45 minutes", "last 2 days", "last 12 hours"
+- Common examples: last 15 minutes, last 30 minutes, last 1 hour, last 6 hours, last 24 hours, last 7 days
+- The OCI query interval is computed automatically based on the duration (see TROUBLESHOOTING.md for the tier table)
 - If the user says something vague such as `recently`, ask a clarification question.
 
 ### 8.4 Threshold Defaults
