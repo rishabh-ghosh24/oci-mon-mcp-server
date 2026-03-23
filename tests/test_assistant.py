@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from oci_mon_mcp.artifacts import ArtifactManager
-from oci_mon_mcp.assistant import MonitoringAssistantService
+from oci_mon_mcp.assistant import MonitoringAssistantService, _interval_for_duration, _time_range_to_minutes
 from oci_mon_mcp.execution import MonitoringExecutionAdapter
 from oci_mon_mcp.errors import (
     AuthFallbackSuggestedError,
@@ -549,6 +549,68 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         assert shared is not None
         self.assertEqual(shared["resolved_metric"], "cpu")
         self.assertEqual(shared["scope"], "shared")
+
+
+class TimeRangeParsingTests(unittest.TestCase):
+    """Tests for dynamic time range parsing and interval computation."""
+
+    def test_interval_tiers(self):
+        """Verify each tier boundary returns the correct interval."""
+        self.assertEqual(_interval_for_duration("5m"), "1m")
+        self.assertEqual(_interval_for_duration("30m"), "1m")
+        self.assertEqual(_interval_for_duration("31m"), "5m")
+        self.assertEqual(_interval_for_duration("1h"), "5m")
+        self.assertEqual(_interval_for_duration("2h"), "15m")
+        self.assertEqual(_interval_for_duration("6h"), "15m")
+        self.assertEqual(_interval_for_duration("7h"), "1h")
+        self.assertEqual(_interval_for_duration("12h"), "1h")
+        self.assertEqual(_interval_for_duration("24h"), "1h")
+        self.assertEqual(_interval_for_duration("36h"), "2h")
+        self.assertEqual(_interval_for_duration("48h"), "2h")
+        self.assertEqual(_interval_for_duration("3d"), "1d")
+        self.assertEqual(_interval_for_duration("7d"), "1d")
+
+    def test_time_range_to_minutes(self):
+        self.assertEqual(_time_range_to_minutes("15m"), 15)
+        self.assertEqual(_time_range_to_minutes("3h"), 180)
+        self.assertEqual(_time_range_to_minutes("2d"), 2880)
+
+    def test_extract_time_range_natural_language(self):
+        """Verify arbitrary N hours/minutes/days are parsed."""
+        service = self._make_service()
+        self.assertEqual(service._extract_time_range("last 3 hours"), "3h")
+        self.assertEqual(service._extract_time_range("past 45 minutes"), "45m")
+        self.assertEqual(service._extract_time_range("last 9 hours"), "9h")
+        self.assertEqual(service._extract_time_range("last 2 days"), "2d")
+        self.assertEqual(service._extract_time_range("last 12 hours"), "12h")
+
+    def test_extract_time_range_named_phrases(self):
+        service = self._make_service()
+        self.assertEqual(service._extract_time_range("last hour"), "1h")
+        self.assertEqual(service._extract_time_range("last week"), "7d")
+        self.assertEqual(service._extract_time_range("last day"), "24h")
+
+    def test_extract_time_range_no_hostname_false_positive(self):
+        """Ensure hostnames like 'myhost-03d' don't match as time ranges."""
+        service = self._make_service()
+        result = service._extract_time_range("show cpu trend for myhost-03d")
+        self.assertIsNone(result)
+
+    def test_extract_time_range_compact(self):
+        service = self._make_service()
+        self.assertEqual(service._extract_time_range("6h"), "6h")
+        self.assertEqual(service._extract_time_range("30m"), "30m")
+
+    def _make_service(self):
+        import tempfile
+        from pathlib import Path
+        from oci_mon_mcp.artifacts import ArtifactManager
+        tmpdir = tempfile.mkdtemp()
+        return MonitoringAssistantService(
+            repository=None,
+            execution_adapter=None,
+            artifact_manager=ArtifactManager(base_dir=Path(tmpdir)),
+        )
 
 
 if __name__ == "__main__":

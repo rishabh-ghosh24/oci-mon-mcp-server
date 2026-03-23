@@ -36,15 +36,44 @@ from .oci_support import OciContextResolver
 from .repository import JsonRepository, utc_now_iso
 
 
-SUPPORTED_TIME_RANGES: dict[str, str] = {
-    "15m": "1m",
-    "30m": "1m",
-    "1h": "5m",
-    "6h": "5m",
-    "12h": "5m",
-    "24h": "1h",
-    "7d": "1d",
-}
+def _interval_for_duration(time_range: str) -> str:
+    """Compute the OCI query interval for any arbitrary time range.
+
+    Tiers:
+        ≤ 30 min   → 1m
+        30m – 1h   → 5m
+        1h – 6h    → 15m
+        6h – 24h   → 1h
+        24h – 48h  → 2h
+        > 48h      → 1d
+    """
+    minutes = _time_range_to_minutes(time_range)
+    if minutes <= 30:
+        return "1m"
+    if minutes <= 60:
+        return "5m"
+    if minutes <= 360:
+        return "15m"
+    if minutes <= 1440:
+        return "1h"
+    if minutes <= 2880:
+        return "2h"
+    return "1d"
+
+
+def _time_range_to_minutes(time_range: str) -> int:
+    """Convert a time range string like '3h', '45m', '7d' to minutes."""
+    match = re.match(r"^(\d+)(m|h|d)$", time_range)
+    if not match:
+        logger.warning("Unparseable time range '%s', defaulting to 60 minutes", time_range)
+        return 60
+    value, unit = int(match.group(1)), match.group(2)
+    if unit == "m":
+        return value
+    if unit == "h":
+        return value * 60
+    # unit == "d"
+    return value * 1440
 
 NEW_QUERY_HINTS = (
     "show",
@@ -1274,7 +1303,7 @@ class MonitoringAssistantService:
             namespace=entry.namespace,
             metric_names=metric_names,
             time_range=time_range,
-            interval=SUPPORTED_TIME_RANGES[time_range],
+            interval=_interval_for_duration(time_range),
             aggregation=aggregation,
             threshold=threshold,
             top_n=top_n,
@@ -1619,44 +1648,42 @@ class MonitoringAssistantService:
         return None
 
     def _extract_time_range(self, text: str) -> str | None:
-        mapping = {
-            "last 15 minutes": "15m",
-            "past 15 minutes": "15m",
-            "last 15 mins": "15m",
-            "last 30 minutes": "30m",
-            "past 30 minutes": "30m",
-            "last 30 mins": "30m",
-            "last 1 hour": "1h",
-            "past 1 hour": "1h",
+        # Named durations
+        named = {
             "last hour": "1h",
             "past hour": "1h",
-            "last 6 hours": "6h",
-            "past 6 hours": "6h",
-            "last 12 hours": "12h",
-            "past 12 hours": "12h",
-            "last 24 hours": "24h",
-            "past 24 hours": "24h",
             "last day": "24h",
             "past day": "24h",
-            "last 7 days": "7d",
-            "past 7 days": "7d",
             "last week": "7d",
+            "past week": "7d",
         }
-        for phrase, value in mapping.items():
+        for phrase, value in named.items():
             if phrase in text:
                 return value
-        compact_mapping = {
-            "15m": "15m",
-            "30m": "30m",
-            "1h": "1h",
-            "6h": "6h",
-            "12h": "12h",
-            "24h": "24h",
-            "7d": "7d",
-        }
-        for phrase, value in compact_mapping.items():
-            if re.search(rf"\b(?:last|past)?\s*{re.escape(phrase)}\b", text):
-                return value
+
+        # "last/past N minutes/hours/days" or "last/past N mins/hrs"
+        match = re.search(
+            r"(?:last|past)\s+(\d+)\s*(minutes?|mins?|hours?|hrs?|days?)",
+            text,
+            re.IGNORECASE,
+        )
+        if match:
+            value = int(match.group(1))
+            unit_raw = match.group(2).lower()
+            if unit_raw.startswith("min"):
+                return f"{value}m"
+            if unit_raw.startswith("h"):
+                return f"{value}h"
+            if unit_raw.startswith("d"):
+                return f"{value}d"
+
+        # Compact form: "1h", "6h", "24h", "7d", "30m" etc.
+        # Require whitespace or start-of-string before digits to avoid matching
+        # hostnames like "myhost-03d" or "web-12h".
+        compact = re.search(r"(?:^|\s)(\d+)\s*([mhd])\b", text)
+        if compact:
+            return f"{compact.group(1)}{compact.group(2)}"
+
         return None
 
     def _extract_top_n(self, text: str) -> int | None:
