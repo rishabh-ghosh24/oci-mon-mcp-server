@@ -287,9 +287,9 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
                 "instance_name",
                 "compartment",
                 "lifecycle_state",
+                "latest_value",
                 "max_value",
                 "time_of_max",
-                "latest_value",
             ],
         )
         self.assertNotIn("instance_ocid", second_response.tables[0].rows[0])

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import unittest
 
 from oci_mon_mcp.models import ParsedQuery, QueryExecutionRequest
-from oci_mon_mcp.oci_sdk_adapter import OciSdkExecutionAdapter
+from oci_mon_mcp.oci_sdk_adapter import OciSdkExecutionAdapter, _time_range_to_delta
 from oci_mon_mcp.oci_support import OciSession
 
 
@@ -389,6 +389,35 @@ class OciSdkExecutionAdapterTests(unittest.TestCase):
         self.assertIsInstance(call["duration_ms"], int)
         self.assertGreaterEqual(call["duration_ms"], 0)
         self.assertIn("total_api_ms", result.timing)
+
+
+class TimeRangeToDeltaTests(unittest.TestCase):
+    """Tests for _time_range_to_delta function."""
+
+    def test_minutes(self):
+        from datetime import timedelta
+        self.assertEqual(_time_range_to_delta("15m"), timedelta(minutes=15))
+        self.assertEqual(_time_range_to_delta("45m"), timedelta(minutes=45))
+
+    def test_hours(self):
+        from datetime import timedelta
+        self.assertEqual(_time_range_to_delta("9h"), timedelta(hours=9))
+        self.assertEqual(_time_range_to_delta("1h"), timedelta(hours=1))
+
+    def test_days(self):
+        from datetime import timedelta
+        self.assertEqual(_time_range_to_delta("3d"), timedelta(days=3))
+        self.assertEqual(_time_range_to_delta("7d"), timedelta(days=7))
+
+    def test_unparseable_defaults_to_1h(self):
+        from datetime import timedelta
+        self.assertEqual(_time_range_to_delta("foo"), timedelta(hours=1))
+        self.assertEqual(_time_range_to_delta(""), timedelta(hours=1))
+
+    def test_zero_defaults_to_1h(self):
+        from datetime import timedelta
+        self.assertEqual(_time_range_to_delta("0m"), timedelta(hours=1))
+        self.assertEqual(_time_range_to_delta("0h"), timedelta(hours=1))
 
 
 if __name__ == "__main__":

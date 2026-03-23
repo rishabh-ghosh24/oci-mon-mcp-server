@@ -1253,6 +1253,8 @@ class MonitoringAssistantService:
                 "cpu_latest_value",
                 "memory_latest_value",
             ]
+        if parsed.intent == "worst_performing" and "latest_value" in row:
+            return base + ["latest_value", "max_value", "time_of_max"]
         if parsed.aggregation == "mean" and "mean_value" in row:
             return base + ["mean_value", "latest_value"]
         if "max_value" in row:

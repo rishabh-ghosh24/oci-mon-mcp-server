@@ -5,6 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import os
+import re
 import threading
 import time
 from collections import defaultdict
@@ -16,14 +17,21 @@ from .models import ChartPoint, ChartSeries, ExecutionResult, QueryExecutionRequ
 
 logger = logging.getLogger(__name__)
 
-TIME_RANGE_TO_DELTA: dict[str, timedelta] = {
-    "15m": timedelta(minutes=15),
-    "30m": timedelta(minutes=30),
-    "1h": timedelta(hours=1),
-    "6h": timedelta(hours=6),
-    "24h": timedelta(hours=24),
-    "7d": timedelta(days=7),
-}
+def _time_range_to_delta(time_range: str) -> timedelta:
+    """Convert any time range string (e.g., '9h', '3d', '45m') to a timedelta."""
+    match = re.match(r"^(\d+)(m|h|d)$", time_range)
+    if not match:
+        logger.warning("Unparseable time range '%s', defaulting to 1 hour", time_range)
+        return timedelta(hours=1)
+    value, unit = int(match.group(1)), match.group(2)
+    if value == 0:
+        logger.warning("Zero-length time range '%s', defaulting to 1 hour", time_range)
+        return timedelta(hours=1)
+    if unit == "m":
+        return timedelta(minutes=value)
+    if unit == "h":
+        return timedelta(hours=value)
+    return timedelta(days=value)
 
 THRESHOLD_NO_MATCH_LIMIT = 5
 
@@ -122,7 +130,7 @@ class OciSdkExecutionAdapter:
             self._instance_cache.put(cache_key, instance_index)
 
         end_time = datetime.now(UTC)
-        start_time = end_time - TIME_RANGE_TO_DELTA[request.parsed_query.time_range]
+        start_time = end_time - _time_range_to_delta(request.parsed_query.time_range)
         streams: dict[str, dict[str, Any]] = defaultdict(
             lambda: {
                 "instance_name": None,
@@ -549,6 +557,11 @@ class OciSdkExecutionAdapter:
         )
         if request.parsed_query.intent == "worst_performing":
             # Sort by latest (current) value — "worst performing right now"
+            logger.debug(
+                "worst_performing sort: %d rows, latest_values=%s",
+                len(rows),
+                [r.get("latest_value") for r in rows[:5]],
+            )
             rows.sort(key=lambda row: row.get("latest_value", 0.0), reverse=True)
         elif request.parsed_query.intent == "top_n":
             rows.sort(key=lambda row: row.get("aggregated_value", 0.0), reverse=True)
