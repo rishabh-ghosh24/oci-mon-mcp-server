@@ -109,7 +109,7 @@ python3.11 scripts/manage_users.py remove "zubair" --client codex   # revoke
 ### Notes
 - Tokens are credentials. Share them only with the intended tester.
 - One token per person **per client**: `zubair + codex` and `zubair + claude` live in separate profile directories on purpose.
-- If the printed URL shows `127.0.0.1`, set `OCI_MON_MCP_PUBLIC_HOST=<vm-public-ip>` (and `_PORT`/`_SCHEME` if needed) before running so the URL is sendable as-is.
+- The script auto-detects the VM's public IP (OCI instance metadata first, then `ifconfig.me`). To override, set `OCI_MON_MCP_PUBLIC_HOST` (and optionally `_PORT`/`_SCHEME`).
 - A fresh profile starts without a saved default region or compartment and will ask for setup first.
 - No server restart needed — the registry is read live.
 - Shared learnings are promoted later by `scripts/aggregate_learnings.py`; they are not written live across users.

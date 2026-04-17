@@ -54,14 +54,55 @@ def _find_records(registry: dict[str, dict[str, Any]], *, user_id: str, client_t
     return matches
 
 
+_CACHED_PUBLIC_HOST: str | None = None
+
+
+def _detect_public_host() -> str | None:
+    """Best-effort public IP detection: OCI IMDS first, then a public echo service."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(
+            "http://169.254.169.254/opc/v2/vnics/",
+            headers={"Authorization": "Bearer Oracle"},
+        )
+        with urllib.request.urlopen(req, timeout=1.0) as resp:
+            for vnic in json.loads(resp.read().decode("utf-8")):
+                ip = vnic.get("publicIp")
+                if ip:
+                    return ip
+    except (urllib.error.URLError, OSError, ValueError):
+        pass
+
+    for url in ("https://ifconfig.me", "https://icanhazip.com"):
+        try:
+            with urllib.request.urlopen(url, timeout=2.0) as resp:
+                ip = resp.read().decode("utf-8").strip()
+                if ip:
+                    return ip
+        except (urllib.error.URLError, OSError):
+            continue
+
+    return None
+
+
 def _public_url(token: str) -> str:
+    global _CACHED_PUBLIC_HOST
     import os
 
     scheme = os.getenv("OCI_MON_MCP_PUBLIC_SCHEME", "http")
-    server_host = os.getenv("OCI_MON_MCP_PUBLIC_HOST", os.getenv("OCI_MON_MCP_HOST", "127.0.0.1"))
+    explicit = os.getenv("OCI_MON_MCP_PUBLIC_HOST") or os.getenv("OCI_MON_MCP_HOST")
+    if explicit:
+        host = explicit
+    else:
+        if _CACHED_PUBLIC_HOST is None:
+            _CACHED_PUBLIC_HOST = _detect_public_host() or "127.0.0.1"
+        host = _CACHED_PUBLIC_HOST
     port = os.getenv("OCI_MON_MCP_PUBLIC_PORT", os.getenv("OCI_MON_MCP_PORT", "8000"))
     path = os.getenv("OCI_MON_MCP_STREAMABLE_HTTP_PATH", "/mcp")
-    return f"{scheme}://{server_host}:{port}{path}?u={token}"
+    return f"{scheme}://{host}:{port}{path}?u={token}"
 
 
 def cmd_add(factory: RepositoryFactory, args: argparse.Namespace) -> int:
