@@ -78,25 +78,40 @@ See `docs/QUICKSTART.md` for the VM runbook and first test sequence.
 See `docs/CLIENT_SETUP.md` for Codex, Claude, and ChatGPT client setup.
 
 ## Pilot Multi-User Mode
-For the shared VM pilot, enable token enforcement and create one token per person/client pair.
+For the shared VM pilot, create one token per person per client (Codex and Claude each need their own).
 
-Examples:
+### Add a new tester
+
+On the VM, from the repo root (`~/oci-mon-mcp-server`):
 
 ```bash
-python3 scripts/manage_users.py add "rishabh" --client codex
-python3 scripts/manage_users.py add "rishabh" --client claude
+# Requires Python 3.10+ — on Oracle Linux 8 use python3.11 explicitly.
+python3.11 scripts/manage_users.py add "zubair" --client codex
+python3.11 scripts/manage_users.py add "zubair" --client claude
 ```
 
-Each command prints a tokenized MCP URL:
+Each command prints a tokenized MCP URL — send that exact URL to the tester:
 
 ```text
-http://<vm-public-ip>:8000/mcp?u=<token>
+mcp_url=http://<vm-public-ip>:8000/mcp?u=<token>
 ```
 
-Important:
+The tester then follows `docs/CLIENT_SETUP.md` to register the URL in Codex or Claude.
+
+### Other commands
+
+```bash
+python3.11 scripts/manage_users.py list                     # show all tokens
+python3.11 scripts/manage_users.py rotate "zubair" --client codex   # issue new token, revoke old
+python3.11 scripts/manage_users.py remove "zubair" --client codex   # revoke
+```
+
+### Notes
 - Tokens are credentials. Share them only with the intended tester.
-- `rishabh + codex` and `rishabh + claude` intentionally use different profile directories.
+- One token per person **per client**: `zubair + codex` and `zubair + claude` live in separate profile directories on purpose.
+- If the printed URL shows `127.0.0.1`, set `OCI_MON_MCP_PUBLIC_HOST=<vm-public-ip>` (and `_PORT`/`_SCHEME` if needed) before running so the URL is sendable as-is.
 - A fresh profile starts without a saved default region or compartment and will ask for setup first.
+- No server restart needed — the registry is read live.
 - Shared learnings are promoted later by `scripts/aggregate_learnings.py`; they are not written live across users.
 
 ## Seed Promotion Workflow
