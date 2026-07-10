@@ -59,10 +59,10 @@ MCP server that connects AI assistants to OCI Monitoring service. Query, analyze
 - VM setup, runtime configuration, and test flow are captured in `docs/QUICKSTART.md`.
 
 ## Prototype Capabilities
-- Registry-driven multi-namespace support (9 OCI namespaces: compute, VCN, block storage, load balancer, database, autonomous DB, object storage, OKE, functions)
+- Registry-driven multi-namespace support (12 OCI namespaces, including resource-group-aware Stack Monitoring and database-system metrics)
 - Natural-language monitoring flow with clarification-first handling for ambiguous requests
 - Named-instance trend flow with exact or partial instance resolution
-- Runtime metric discovery for unknown namespaces via OCI ListMetrics API
+- OCI ListMetrics discovery helpers for extending the static registry
 - Instance caching with stale-while-revalidate for fast repeat queries
 - Structured audit logging with per-request timing (JSONL format)
 - Multi-user identity isolation with token-based auth for shared-VM pilot deployments

@@ -531,6 +531,54 @@ class MonitoringAssistantServiceTests(unittest.TestCase):
         self.assertEqual(parsed.metric_names, ["VnicFromNetworkBytes"])
         self.assertEqual(parsed.metric_label, "Network bytes received")
 
+    def test_build_parsed_query_stack_monitoring_resource_group(self) -> None:
+        parsed = self.service._build_parsed_query(
+            source_query="show EBS active users over the last hour",
+            intent="top_n",
+            metric_key="ebs_active_users",
+            time_range="1h",
+        )
+        self.assertEqual(parsed.namespace, "oracle_appmgmt")
+        self.assertEqual(parsed.resource_group, "ebs_instance")
+        self.assertEqual(parsed.resource_name_dimension, "resourceName")
+        self.assertEqual(parsed.group_by_dimensions, ["resourceId", "resourceName"])
+
+        request = QueryExecutionRequest(
+            parsed_query=parsed,
+            profile_id="default",
+            region="us-ashburn-1",
+            compartment_name="ebs-demo",
+            compartment_id="ocid1.compartment.oc1..ebs",
+        )
+        self.assertEqual(
+            request.query_text,
+            "ActiveUserSessions[5m].groupBy(resourceId,resourceName).max()",
+        )
+
+        parsed.instance_name = "EBSDEMO"
+        self.assertEqual(
+            request.query_text,
+            'ActiveUserSessions[5m]{resourceName = "EBSDEMO"}.max()',
+        )
+
+    def test_specific_stack_metric_alias_wins_over_generic_compute_cpu(self) -> None:
+        metric_key = self.service._extract_metric("show weblogic cpu utilization")
+        self.assertEqual(metric_key, "weblogic_cpu")
+
+    def test_stack_monitoring_aliases_cover_ebs_demo_tiers(self) -> None:
+        cases = {
+            "show EBS active users": "ebs_active_users",
+            "show EBS active users by responsibility": "ebs_active_users_by_responsibility",
+            "show EBS host filesystem utilization": "stack_host_filesystem",
+            "show Oracle HTTP Server request rate": "ohs_request_rate",
+            "show WebLogic stuck threads": "weblogic_stuck_threads",
+            "show EBS database DB time": "managed_db_time",
+            "show EBS database listener refused connections": "db_listener_refused_connections",
+        }
+        for query, expected_metric_key in cases.items():
+            with self.subTest(query=query):
+                self.assertEqual(self.service._extract_metric(query), expected_metric_key)
+
     def test_preference_is_scoped_to_profile_until_promoted(self) -> None:
         repository = JsonRepository(data_dir=Path(self.tempdir.name) / "shared-preferences")
 

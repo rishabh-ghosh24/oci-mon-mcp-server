@@ -20,12 +20,14 @@ class FakeSummarizeMetricsDataDetails:
         start_time: datetime,
         end_time: datetime,
         resolution: str,
+        resource_group: str | None = None,
     ) -> None:
         self.namespace = namespace
         self.query = query
         self.start_time = start_time
         self.end_time = end_time
         self.resolution = resolution
+        self.resource_group = resource_group
 
 
 class FakePagination:
@@ -47,9 +49,11 @@ class FakeOciModule:
 class FakeMonitoringClient:
     def __init__(self, datasets: dict[str, list[object]]) -> None:
         self.datasets = datasets
+        self.last_details = None
 
     def summarize_metrics_data(self, **kwargs):
         details = kwargs["summarize_metrics_data_details"]
+        self.last_details = details
         metric_name = details.query.split("[", 1)[0]
         return SimpleNamespace(data=self.datasets.get(metric_name, []))
 
@@ -66,6 +70,8 @@ class FakeClientFactory:
     def __init__(self, *, datasets: dict[str, list[object]], instances: list[object]) -> None:
         self.datasets = datasets
         self.instances = instances
+        self.monitoring_client = FakeMonitoringClient(self.datasets)
+        self.last_include_compute = None
 
     def build_session(
         self,
@@ -77,12 +83,13 @@ class FakeClientFactory:
         include_compute: bool = False,
         include_identity: bool = False,
     ) -> OciSession:
+        self.last_include_compute = include_compute
         return OciSession(
             oci=FakeOciModule(),
             region=region,
             auth_mode=auth_mode,
             tenancy_id="ocid1.tenancy.oc1..test",
-            monitoring_client=FakeMonitoringClient(self.datasets) if include_monitoring else None,
+            monitoring_client=self.monitoring_client if include_monitoring else None,
             compute_client=FakeComputeClient(self.instances) if include_compute else None,
         )
 
@@ -102,6 +109,23 @@ def metric_stream(
             "resourceDisplayName": instance_name,
             "compartmentId": compartment_id,
         },
+        aggregated_datapoints=[point],
+    )
+
+
+def stack_metric_stream(
+    *,
+    resource_id: str,
+    resource_name: str,
+    timestamp: str,
+    value: float,
+) -> object:
+    point = SimpleNamespace(
+        timestamp=datetime.fromisoformat(timestamp.replace("Z", "+00:00")),
+        value=value,
+    )
+    return SimpleNamespace(
+        dimensions={"resourceId": resource_id, "resourceName": resource_name},
         aggregated_datapoints=[point],
     )
 
@@ -389,6 +413,59 @@ class OciSdkExecutionAdapterTests(unittest.TestCase):
         self.assertIsInstance(call["duration_ms"], int)
         self.assertGreaterEqual(call["duration_ms"], 0)
         self.assertIn("total_api_ms", result.timing)
+
+    def test_stack_monitoring_query_passes_resource_group_and_uses_resource_name(self) -> None:
+        parsed = ParsedQuery(
+            intent="top_n",
+            metric_key="ebs_active_users",
+            metric_label="EBS active user sessions",
+            namespace="oracle_appmgmt",
+            metric_names=["ActiveUserSessions"],
+            time_range="1h",
+            interval="15m",
+            aggregation="max",
+            resource_group="ebs_instance",
+            resource_name_dimension="resourceName",
+            group_by_dimensions=["resourceId", "resourceName"],
+            resource_label="Stack Monitoring resource",
+            source_query="show EBS active users",
+        )
+        request = QueryExecutionRequest(
+            parsed_query=parsed,
+            profile_id="default",
+            region="us-ashburn-1",
+            compartment_name="ebs-demo",
+            compartment_id="ocid1.compartment.oc1..ebs",
+        )
+        factory = FakeClientFactory(
+            datasets={
+                "ActiveUserSessions": [
+                    stack_metric_stream(
+                        resource_id="ocid1.stackmonitoringresource.oc1..ebs",
+                        resource_name="EBSDEMO",
+                        timestamp="2026-07-10T10:00:00Z",
+                        value=12.0,
+                    )
+                ]
+            },
+            instances=[],
+        )
+        adapter = OciSdkExecutionAdapter(client_factory=factory)
+
+        result = adapter.execute(request)
+
+        self.assertEqual(factory.monitoring_client.last_details.resource_group, "ebs_instance")
+        self.assertFalse(factory.last_include_compute)
+        self.assertEqual(
+            factory.monitoring_client.last_details.query,
+            "ActiveUserSessions[15m].groupBy(resourceId,resourceName).max()",
+        )
+        self.assertEqual(result.rows[0]["instance_name"], "EBSDEMO")
+        self.assertIn("Stack Monitoring resources", result.summary)
+        self.assertEqual(
+            result.timing["oci_api_calls"][0]["resource_group"],
+            "ebs_instance",
+        )
 
 
 class TimeRangeToDeltaTests(unittest.TestCase):

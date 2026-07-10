@@ -421,11 +421,15 @@ The prototype persists local state under `data/`:
 
 ## 13. Operational Notes
 - Compute CPU and memory metrics require the Compute Instance Monitoring plugin to be enabled.
-- The server supports 9 OCI metric namespaces: `oci_computeagent`, `oci_vcn`, `oci_blockstore`,
-  `oci_lbaas`, `oci_database`, `oci_autonomous_database`, `oci_objectstorage`, `oci_oke`, `oci_faas`.
+- The server supports 12 OCI metric namespaces: `oci_computeagent`, `oci_vcn`, `oci_blockstore`,
+  `oci_lbaas`, `oci_database`, `oci_autonomous_database`, `oci_objectstorage`, `oci_oke`, `oci_faas`,
+  `oracle_appmgmt`, `oracle_oci_database`, and `oracle_oci_database_cluster`.
+- Stack Monitoring queries pass the registry metric's OCI Monitoring `resourceGroup` value and use
+  `resourceName` to identify EBS, host, Oracle HTTP Server, and WebLogic resources.
 - Metrics are driven by `data/metric_registry.yaml`. To add a new namespace or metric, edit the
   YAML and restart the server. Override the registry path with `OCI_MON_MCP_METRIC_REGISTRY_PATH`.
-- Unknown namespaces not in the registry are auto-discovered at runtime via the OCI ListMetrics API.
+- The current request path resolves metrics from the loaded registry; OCI ListMetrics helpers can
+  be used when extending that registry.
 - `storage usage %` inside the instance is intentionally reported as unavailable from standard OCI
   Monitoring metrics alone. Database and Object Storage metrics are available separately.
 - Disk I/O is supported after clarification.

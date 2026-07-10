@@ -1128,6 +1128,7 @@ class MonitoringAssistantService:
                     scope=self._scope_details(profile_id, profile, scope),
                     interval=parsed.interval,
                     namespace=parsed.namespace,
+                    resource_group=parsed.resource_group,
                     metric=parsed.metric_label,
                     timing={"started_at": started_at, "finished_at": utc_now_iso()},
                 ),
@@ -1156,6 +1157,7 @@ class MonitoringAssistantService:
             scope=self._scope_details(profile_id, profile, scope),
             interval=parsed.interval,
             namespace=parsed.namespace,
+            resource_group=parsed.resource_group,
             metric=parsed.metric_label,
             truncated=len(result.rows) > DEFAULT_TABLE_LIMIT,
             timing={"started_at": started_at, "finished_at": utc_now_iso()},
@@ -1295,6 +1297,9 @@ class MonitoringAssistantService:
         entry = self._registry.resolve(metric_key)
         if entry is None:
             raise ValueError(f"Unknown metric_key: {metric_key}")
+        namespace_info = self._registry.get_namespace_info(entry.namespace)
+        if namespace_info is None:
+            raise ValueError(f"Unknown namespace: {entry.namespace}")
         metric_names = list(entry.metric_names)
         if metric_key in {"disk_io_throughput", "disk_io_iops"} and io_direction in {"read", "write"}:
             metric_names = [metric_names[0] if io_direction == "read" else metric_names[1]]
@@ -1307,6 +1312,10 @@ class MonitoringAssistantService:
             time_range=time_range,
             interval=_interval_for_duration(time_range),
             aggregation=aggregation,
+            resource_group=entry.resource_group,
+            resource_name_dimension=namespace_info.resource_name_dimension,
+            group_by_dimensions=list(namespace_info.group_by_dimensions),
+            resource_label=namespace_info.resource_label,
             threshold=threshold,
             top_n=top_n,
             instance_name=instance_name,
@@ -1348,7 +1357,12 @@ class MonitoringAssistantService:
         *,
         compartment_id: str | None,
     ) -> ParsedQuery:
-        if not parsed.instance_name or parsed.instance_id or not compartment_id:
+        if (
+            not parsed.instance_name
+            or parsed.instance_id
+            or not compartment_id
+            or parsed.namespace != "oci_computeagent"
+        ):
             return parsed
         resolved = self.context_resolver.resolve_instance_name(
             region=profile["region"],
@@ -1476,25 +1490,27 @@ class MonitoringAssistantService:
     def _interpretation_line(self, parsed: ParsedQuery, *, scope_label: str) -> str:
         metric_phrase = parsed.metric_label.lower()
         aggregation_phrase = parsed.aggregation.lower()
+        resource_label = parsed.resource_label
+        resources_label = resource_label if resource_label.endswith("s") else f"{resource_label}s"
         if parsed.intent == "threshold" and parsed.threshold is not None:
             return (
-                f"Interpreted as: find compute instances in {scope_label} whose {aggregation_phrase} {metric_phrase} exceeded "
+                f"Interpreted as: find {resources_label} in {scope_label} whose {aggregation_phrase} {metric_phrase} exceeded "
                 f"{parsed.threshold:.0f}% in the last {parsed.time_range}."
             )
         if parsed.intent == "named_trend" and parsed.instance_name:
             return (
-                f"Interpreted as: show the {metric_phrase} trend for compute instance "
+                f"Interpreted as: show the {metric_phrase} trend for {resource_label} "
                 f"{parsed.instance_name} in {scope_label} "
                 f"over the last {parsed.time_range}."
             )
         if parsed.intent == "worst_performing":
             return (
-                f"Interpreted as: show the worst-performing compute instances by {metric_phrase} "
+                f"Interpreted as: show the worst-performing {resources_label} by {metric_phrase} "
                 f"in the last {parsed.time_range} in {scope_label}, "
                 f"ranked descending by recent {metric_phrase}."
             )
         return (
-            f"Interpreted as: show compute instances ranked by {aggregation_phrase} {metric_phrase} in the last "
+            f"Interpreted as: show {resources_label} ranked by {aggregation_phrase} {metric_phrase} in the last "
             f"{parsed.time_range} in {scope_label}."
         )
 
@@ -1618,6 +1634,9 @@ class MonitoringAssistantService:
 
     def _extract_metric(self, text: str) -> str | None:
         normalized = text.lower()
+        registry_match = self._registry.resolve_by_alias(normalized)
+        if registry_match is not None:
+            return registry_match.metric_key
         has_cpu = "cpu" in normalized
         has_memory = (
             "memory" in normalized or "mem " in f"{normalized} " or normalized.endswith("mem")
@@ -1634,10 +1653,6 @@ class MonitoringAssistantService:
             return "disk_io_throughput"
         if "iops" in normalized and "io" in normalized:
             return "disk_io_iops"
-        # Fall through to registry alias resolution for new namespaces
-        registry_match = self._registry.resolve_by_alias(normalized)
-        if registry_match is not None:
-            return registry_match.metric_key
         return None
 
     def _extract_threshold(self, text: str) -> float | None:

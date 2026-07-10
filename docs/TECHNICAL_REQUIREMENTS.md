@@ -199,7 +199,7 @@ The parser/interpreter must support:
 - named-instance trend queries
 
 ### 6.2 Supported Metrics
-Metrics are registry-driven via `data/metric_registry.yaml`. The registry currently covers 9
+Metrics are registry-driven via `data/metric_registry.yaml`. The registry currently covers 12
 namespaces:
 
 1. `oci_computeagent` — CPU, memory, disk I/O (throughput and IOPS)
@@ -211,10 +211,13 @@ namespaces:
 7. `oci_objectstorage` — bucket size and request count
 8. `oci_oke` — OKE node CPU and memory utilization
 9. `oci_faas` — function invocations, duration, errors
+10. `oracle_appmgmt` — Stack Monitoring metrics for EBS, hosts, Oracle HTTP Server, and WebLogic resource groups
+11. `oracle_oci_database` — managed and external Oracle Database status, CPU, DB time, wait time, sessions, and storage
+12. `oracle_oci_database_cluster` — ASM, cluster, database-node, and listener metrics by resource group
 
 The registry is extensible: add entries to `data/metric_registry.yaml` or override the path with
-the `OCI_MON_MCP_METRIC_REGISTRY_PATH` environment variable. Namespaces not in the static registry
-fall back to runtime discovery via the OCI ListMetrics API.
+the `OCI_MON_MCP_METRIC_REGISTRY_PATH` environment variable. OCI ListMetrics discovery helpers are
+available, but the current request path resolves metrics from the loaded registry.
 
 ### 6.3 Special Interpretation Rules
 - `show me all compute instances with CPU utilization above 80% in the last 1 hour` should map to
@@ -332,12 +335,13 @@ Metric interpretation is driven by the metric registry (`data/metric_registry.ya
 hardcoded mappings. The registry defines namespace-to-metric mappings, natural-language aliases,
 units, and axis labels for each metric key.
 
-The registry currently supports 9 OCI namespaces (see section 6.2 for the full list). Each
+The registry currently supports 12 OCI namespaces (see section 6.2 for the full list). Each
 namespace entry specifies:
 - `display_name` — human-readable service name
 - `resource_type` — OCI resource type
 - `sdk_client` — OCI SDK client class
-- `metrics` — map of metric keys to metric names, aliases, units, and chart labels
+- `resource_name_dimension` and `group_by_dimensions` — dimensions used to identify resources in Monitoring results
+- `metrics` — map of metric keys to metric names, optional resource groups, aliases, units, and chart labels
 
 The registry path can be overridden with `OCI_MON_MCP_METRIC_REGISTRY_PATH`. After editing the
 registry YAML, restart the server for changes to take effect.

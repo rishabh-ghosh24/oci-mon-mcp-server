@@ -97,37 +97,41 @@ class OciSdkExecutionAdapter:
                 "a compartment OCID before running live queries."
             )
 
+        uses_compute_inventory = request.parsed_query.namespace == "oci_computeagent"
         session = self.client_factory.build_session(
             region=request.region,
             auth_mode=request.auth_mode,
             config_fallback=request.config_fallback,
             include_monitoring=True,
-            include_compute=True,
+            include_compute=uses_compute_inventory,
         )
         assert session.monitoring_client is not None
-        assert session.compute_client is not None
         oci = session.oci
 
         # --- Instance listing with stale-while-revalidate cache ---
-        cache_key = (request.region, request.compartment_id, request.include_subcompartments)
-        cached_index, is_stale = self._instance_cache.get(cache_key)
-        if cached_index is not None:
-            instance_index = cached_index
-            if is_stale and self._instance_cache.mark_refreshing(cache_key):
-                threading.Thread(
-                    target=self._refresh_instance_cache,
-                    args=(oci, session.compute_client, request, cache_key),
-                    daemon=True,
-                ).start()
+        if uses_compute_inventory:
+            assert session.compute_client is not None
+            cache_key = (request.region, request.compartment_id, request.include_subcompartments)
+            cached_index, is_stale = self._instance_cache.get(cache_key)
+            if cached_index is not None:
+                instance_index = cached_index
+                if is_stale and self._instance_cache.mark_refreshing(cache_key):
+                    threading.Thread(
+                        target=self._refresh_instance_cache,
+                        args=(oci, session.compute_client, request, cache_key),
+                        daemon=True,
+                    ).start()
+            else:
+                instance_index = self._list_instances(
+                    oci,
+                    session.compute_client,
+                    request.compartment_id,
+                    include_subcompartments=request.include_subcompartments,
+                    compartment_lookup=request.compartment_lookup,
+                )
+                self._instance_cache.put(cache_key, instance_index)
         else:
-            instance_index = self._list_instances(
-                oci,
-                session.compute_client,
-                request.compartment_id,
-                include_subcompartments=request.include_subcompartments,
-                compartment_lookup=request.compartment_lookup,
-            )
-            self._instance_cache.put(cache_key, instance_index)
+            instance_index = {}
 
         end_time = datetime.now(UTC)
         start_time = end_time - _time_range_to_delta(request.parsed_query.time_range)
@@ -179,7 +183,11 @@ class OciSdkExecutionAdapter:
         for metric_name, metric_data_list, *_ in metric_results:
             for metric_data in metric_data_list:
                 dimensions = metric_data.dimensions or {}
-                resource_id = dimensions.get("resourceId") or dimensions.get("resourceDisplayName")
+                resource_id = (
+                    dimensions.get("resourceId")
+                    or dimensions.get("resourceName")
+                    or dimensions.get("resourceDisplayName")
+                )
                 if resource_id is None:
                     continue
                 instance = streams[resource_id]
@@ -191,7 +199,8 @@ class OciSdkExecutionAdapter:
                     else request.compartment_name
                 )
                 instance["instance_name"] = (
-                    dimensions.get("resourceDisplayName")
+                    dimensions.get("resourceName")
+                    or dimensions.get("resourceDisplayName")
                     or metadata.get("display_name")
                     or resource_id
                 )
@@ -274,8 +283,11 @@ class OciSdkExecutionAdapter:
                 f"in {request.compartment_name}."
             )
         else:
+            resources_label = request.parsed_query.resource_label
+            if not resources_label.endswith("s"):
+                resources_label = f"{resources_label}s"
             summary = (
-                f"Found {len(rows)} compute instances for {metric_label} in "
+                f"Found {len(rows)} {resources_label} for {metric_label} in "
                 f"{request.compartment_name} over the last {request.parsed_query.time_range}."
             )
         return ExecutionResult(summary=summary, rows=rows, chart_series=chart_series, timing=_build_timing(api_timings))
@@ -292,12 +304,17 @@ class OciSdkExecutionAdapter:
     ) -> tuple[str, list[Any], dict[str, Any]]:
         """Fetch a single metric from OCI Monitoring. Thread-safe."""
         metric_name = query_text.split("[", 1)[0]
+        details_kwargs: dict[str, Any] = {
+            "namespace": request.parsed_query.namespace,
+            "query": query_text,
+            "start_time": start_time,
+            "end_time": end_time,
+            "resolution": request.parsed_query.interval,
+        }
+        if request.parsed_query.resource_group is not None:
+            details_kwargs["resource_group"] = request.parsed_query.resource_group
         details = oci.monitoring.models.SummarizeMetricsDataDetails(
-            namespace=request.parsed_query.namespace,
-            query=query_text,
-            start_time=start_time,
-            end_time=end_time,
-            resolution=request.parsed_query.interval,
+            **details_kwargs,
         )
         summarize_kwargs: dict[str, Any] = {
             "compartment_id": request.compartment_id,
@@ -321,6 +338,8 @@ class OciSdkExecutionAdapter:
             "metric": metric_name,
             "duration_ms": duration_ms,
         }
+        if request.parsed_query.resource_group is not None:
+            timing_info["resource_group"] = request.parsed_query.resource_group
         return metric_name, response.data, timing_info
 
     def _refresh_instance_cache(

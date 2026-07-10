@@ -44,6 +44,46 @@ class MetricRegistryTests(unittest.TestCase):
         self.assertEqual(info.resource_type, "DbSystem")
         self.assertEqual(info.sdk_client, "DatabaseClient")
 
+    def test_stack_monitoring_metric_includes_resource_group(self):
+        registry = MetricRegistry.from_yaml("data/metric_registry.yaml")
+        entry = registry.resolve("ebs_active_users")
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.namespace, "oracle_appmgmt")
+        self.assertEqual(entry.resource_group, "ebs_instance")
+        self.assertEqual(entry.metric_names, ("ActiveUserSessions",))
+
+        responsibility_entry = registry.resolve("ebs_active_users_by_responsibility")
+        self.assertIsNotNone(responsibility_entry)
+        self.assertEqual(
+            responsibility_entry.metric_names,
+            ("ActiveUserSessionsByResponsibility",),
+        )
+        self.assertEqual(responsibility_entry.resource_group, "ebs_instance")
+
+        info = registry.get_namespace_info("oracle_appmgmt")
+        self.assertIsNotNone(info)
+        self.assertEqual(info.resource_name_dimension, "resourceName")
+        self.assertEqual(info.group_by_dimensions, ("resourceId", "resourceName"))
+
+    def test_managed_database_namespace_uses_resource_name_dimension(self):
+        registry = MetricRegistry.from_yaml("data/metric_registry.yaml")
+        entry = registry.resolve("managed_db_time")
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.namespace, "oracle_oci_database")
+        self.assertIsNone(entry.resource_group)
+
+        info = registry.get_namespace_info("oracle_oci_database")
+        self.assertIsNotNone(info)
+        self.assertEqual(info.resource_name_dimension, "resourceName")
+
+    def test_database_cluster_metric_includes_component_resource_group(self):
+        registry = MetricRegistry.from_yaml("data/metric_registry.yaml")
+        entry = registry.resolve("db_listener_refused_connections")
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.namespace, "oracle_oci_database_cluster")
+        self.assertEqual(entry.resource_group, "oracle_lsnr")
+        self.assertEqual(entry.metric_names, ("RefusedConnections",))
+
     def test_alias_disambiguation_oke_cpu_vs_cpu(self):
         registry = MetricRegistry.from_yaml("data/metric_registry.yaml")
         entry = registry.resolve_by_alias("show oke cpu utilization")
@@ -74,6 +114,7 @@ class MetricRegistryTests(unittest.TestCase):
         self.assertIsNotNone(entry)
         self.assertEqual(entry.namespace, "oci_custom_namespace")
         self.assertEqual(entry.metric_names, ("CustomMetric1",))
+        self.assertIsNone(entry.resource_group)
 
     def test_all_entries_have_required_fields(self):
         registry = MetricRegistry.from_yaml("data/metric_registry.yaml")

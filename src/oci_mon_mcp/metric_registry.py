@@ -25,6 +25,7 @@ class MetricEntry:
     y_axis: str
     unit: str
     aliases: tuple[str, ...]
+    resource_group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,13 @@ class NamespaceInfo:
     display_name: str
     resource_type: str
     sdk_client: str
+    resource_name_dimension: str = "resourceDisplayName"
+    group_by_dimensions: tuple[str, ...] = (
+        "resourceId",
+        "resourceDisplayName",
+        "compartmentId",
+    )
+    resource_label: str = "compute instance"
 
 
 class MetricRegistry:
@@ -80,6 +88,16 @@ class MetricRegistry:
                 display_name=ns_data["display_name"],
                 resource_type=ns_data["resource_type"],
                 sdk_client=ns_data["sdk_client"],
+                resource_name_dimension=ns_data.get(
+                    "resource_name_dimension", "resourceDisplayName"
+                ),
+                group_by_dimensions=tuple(
+                    ns_data.get(
+                        "group_by_dimensions",
+                        ["resourceId", "resourceDisplayName", "compartmentId"],
+                    )
+                ),
+                resource_label=ns_data.get("resource_label", "compute instance"),
             )
             ns_metric_keys: list[str] = []
 
@@ -92,6 +110,7 @@ class MetricRegistry:
                     y_axis=metric_data["y_axis"],
                     unit=metric_data["unit"],
                     aliases=tuple(metric_data.get("aliases", [])),
+                    resource_group=metric_data.get("resource_group"),
                 )
                 ns_metric_keys.append(metric_key)
 
@@ -162,6 +181,7 @@ class MetricRegistry:
                     y_axis=metric_name.lower(),
                     aliases=(metric_name.lower(),),
                     unit=m.get("unit", ""),
+                    resource_group=m.get("resource_group"),
                 )
                 self._entries[key] = entry
                 ns_metric_keys.append(key)

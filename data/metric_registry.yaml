@@ -220,3 +220,393 @@ namespaces:
         y_axis: error_count
         unit: count
         aliases: [function errors, fn errors, function failures, function error count]
+
+  oracle_appmgmt:
+    display_name: Stack Monitoring
+    resource_type: StackMonitoringResource
+    sdk_client: MonitoringClient
+    resource_name_dimension: resourceName
+    group_by_dimensions: [resourceId, resourceName]
+    resource_label: Stack Monitoring resource
+    metrics:
+      ebs_active_users:
+        label: EBS active user sessions
+        metric_names: [ActiveUserSessions]
+        resource_group: ebs_instance
+        y_axis: active_user_sessions
+        unit: count
+        aliases: [ebs active users, ebs active user sessions, active ebs sessions]
+      ebs_active_users_by_responsibility:
+        label: EBS active user sessions by responsibility
+        metric_names: [ActiveUserSessionsByResponsibility]
+        resource_group: ebs_instance
+        y_axis: active_user_sessions_by_responsibility
+        unit: count
+        aliases: [ebs active users by responsibility, ebs sessions by responsibility, active user sessions by responsibility]
+      ebs_active_requests:
+        label: EBS active requests by application
+        metric_names: [ActiveRequestsByApplication]
+        resource_group: ebs_instance
+        y_axis: active_requests
+        unit: count
+        aliases: [ebs active requests, active requests by application, ebs application requests]
+      ebs_completed_requests:
+        label: EBS completed requests by application
+        metric_names: [CompletedRequestsByApplication]
+        resource_group: ebs_instance
+        y_axis: completed_request_ratio
+        unit: percent
+        aliases: [ebs completed requests, completed requests by application, ebs request completion]
+      ebs_program_runtime:
+        label: EBS executed program running time
+        metric_names: [ExecutedProgramsByRunningTime]
+        resource_group: ebs_instance
+        y_axis: program_running_time_ms
+        unit: ms
+        aliases: [ebs program runtime, ebs concurrent program runtime, executed programs by running time]
+      ebs_app_listener_status:
+        label: EBS application listener status
+        metric_names: [MonitoringStatus]
+        resource_group: oracle_ebs_app_lsnr
+        y_axis: monitoring_status
+        unit: status
+        aliases: [ebs application listener status, ebs listener status, ebs app listener availability]
+      ebs_concurrent_processing_status:
+        label: EBS concurrent processing status
+        metric_names: [MonitoringStatus]
+        resource_group: oracle_ebs_conc_mgmt_service
+        y_axis: monitoring_status
+        unit: status
+        aliases: [ebs concurrent processing status, ebs concurrent manager status, concurrent processing availability]
+      ebs_concurrent_manager_capacity:
+        label: EBS concurrent manager capacity utilization
+        metric_names: [CapacityUtilizationOfConcurrentManagers]
+        resource_group: oracle_ebs_conc_mgmt_service
+        y_axis: concurrent_manager_capacity_percent
+        unit: percent
+        aliases: [ebs concurrent manager capacity, concurrent manager utilization, ebs manager capacity]
+      ebs_concurrent_requests:
+        label: EBS concurrent requests by status
+        metric_names: [ConcurrentRequestsByStatus]
+        resource_group: oracle_ebs_conc_mgmt_service
+        y_axis: concurrent_requests
+        unit: count
+        aliases: [ebs concurrent requests, concurrent requests by status, ebs pending requests, ebs running requests]
+      ebs_specialized_manager_status:
+        label: EBS specialized concurrent manager status
+        metric_names: [MonitoringStatus]
+        resource_group: oracle_ebs_conc_mgmt_service_specialized
+        y_axis: monitoring_status
+        unit: status
+        aliases: [ebs specialized manager status, specialized concurrent manager availability]
+      ebs_forms_sessions:
+        label: EBS Forms database sessions
+        metric_names: [FormsDatabaseSessionsPerApplication]
+        resource_group: oracle_ebs_forms_system
+        y_axis: forms_database_sessions
+        unit: count
+        aliases: [ebs forms sessions, forms database sessions, ebs forms sessions by application]
+      ebs_workflow_agent_listener_status:
+        label: EBS workflow agent listener status
+        metric_names: [MonitoringStatus]
+        resource_group: oracle_ebs_wf_agent_lsnr
+        y_axis: monitoring_status
+        unit: status
+        aliases: [ebs workflow agent listener status, workflow agent listener availability]
+      ebs_workflow_background_status:
+        label: EBS workflow background engine status
+        metric_names: [MonitoringStatus]
+        resource_group: oracle_ebs_wf_bkgd_engine
+        y_axis: monitoring_status
+        unit: status
+        aliases: [ebs workflow background status, workflow background engine availability]
+      ebs_workflow_mailer_status:
+        label: EBS workflow notification mailer status
+        metric_names: [MonitoringStatus]
+        resource_group: oracle_ebs_wf_notification_mailer
+        y_axis: monitoring_status
+        unit: status
+        aliases: [ebs workflow mailer status, workflow notification mailer availability]
+      stack_host_status:
+        label: Stack Monitoring host status
+        metric_names: [MonitoringStatus]
+        resource_group: host
+        y_axis: monitoring_status
+        unit: status
+        aliases: [stack monitoring host status, ebs host status, host monitoring status]
+      stack_host_cpu:
+        label: Stack Monitoring host CPU utilization
+        metric_names: [CpuUtilization]
+        resource_group: host
+        y_axis: cpu_utilization_percent
+        unit: percent
+        aliases: [stack monitoring host cpu, ebs host cpu, host cpu utilization]
+      stack_host_memory:
+        label: Stack Monitoring host memory utilization
+        metric_names: [MemoryUtilization]
+        resource_group: host
+        y_axis: memory_utilization_percent
+        unit: percent
+        aliases: [stack monitoring host memory, ebs host memory, host memory utilization]
+      stack_host_filesystem:
+        label: Stack Monitoring host filesystem utilization
+        metric_names: [FilesystemUtilization]
+        resource_group: host
+        y_axis: filesystem_utilization_percent
+        unit: percent
+        aliases: [stack monitoring filesystem, ebs host filesystem, host filesystem utilization]
+      stack_host_network:
+        label: Stack Monitoring host network activity
+        metric_names: [NetworkActivitySummary]
+        resource_group: host
+        y_axis: network_activity_mb_per_second
+        unit: MB/s
+        aliases: [stack monitoring host network, ebs host network, host network activity]
+      ohs_status:
+        label: Oracle HTTP Server status
+        metric_names: [MonitoringStatus]
+        resource_group: oracle_http_server
+        y_axis: monitoring_status
+        unit: status
+        aliases: [oracle http server status, ohs status, ohs availability]
+      ohs_cpu:
+        label: Oracle HTTP Server CPU utilization
+        metric_names: [CPUUtilization]
+        resource_group: oracle_http_server
+        y_axis: cpu_utilization_percent
+        unit: percent
+        aliases: [oracle http server cpu, ohs cpu, ohs cpu utilization]
+      ohs_memory:
+        label: Oracle HTTP Server memory utilization
+        metric_names: [MemoryUtilization]
+        resource_group: oracle_http_server
+        y_axis: memory_utilization_percent
+        unit: percent
+        aliases: [oracle http server memory, ohs memory, ohs memory utilization]
+      ohs_active_connections:
+        label: Oracle HTTP Server active connections
+        metric_names: [ActiveHTTPConnections]
+        resource_group: oracle_http_server
+        y_axis: active_http_connections
+        unit: count
+        aliases: [oracle http server connections, ohs active connections, ohs connections]
+      ohs_request_rate:
+        label: Oracle HTTP Server request rate
+        metric_names: [WebRequestRate]
+        resource_group: oracle_http_server
+        y_axis: requests_per_minute
+        unit: ops/min
+        aliases: [oracle http server request rate, ohs request rate, ohs traffic]
+      ohs_error_rate:
+        label: Oracle HTTP Server error rate
+        metric_names: [ErrorRate]
+        resource_group: oracle_http_server
+        y_axis: errors_per_second
+        unit: errors/s
+        aliases: [oracle http server errors, ohs error rate, ohs errors]
+      weblogic_status:
+        label: WebLogic Server status
+        metric_names: [MonitoringStatus]
+        resource_group: weblogic_j2eeserver
+        y_axis: monitoring_status
+        unit: status
+        aliases: [weblogic server status, weblogic status, weblogic availability]
+      weblogic_cpu:
+        label: WebLogic Server CPU utilization
+        metric_names: [CpuUtilization]
+        resource_group: weblogic_j2eeserver
+        y_axis: cpu_utilization_percent
+        unit: percent
+        aliases: [weblogic server cpu, weblogic cpu, weblogic cpu utilization]
+      weblogic_heap:
+        label: WebLogic JVM heap utilization
+        metric_names: [JVMMemoryUtilization]
+        resource_group: weblogic_j2eeserver
+        y_axis: jvm_memory_utilization_percent
+        unit: percent
+        aliases: [weblogic heap utilization, weblogic jvm memory, weblogic heap]
+      weblogic_stuck_threads:
+        label: WebLogic stuck threads
+        metric_names: [WorkManagerStuckThreads]
+        resource_group: weblogic_j2eeserver
+        y_axis: stuck_thread_count
+        unit: count
+        aliases: [weblogic stuck threads, work manager stuck threads, stuck threads]
+      weblogic_jdbc_connections:
+        label: WebLogic JDBC connections
+        metric_names: [JDBCConnections]
+        resource_group: weblogic_j2eeserver
+        y_axis: jdbc_connection_count
+        unit: count
+        aliases: [weblogic jdbc connections, ebs jdbc connections, jdbc connections]
+      weblogic_jdbc_throughput:
+        label: WebLogic JDBC connection throughput
+        metric_names: [JDBCConnectionThroughput]
+        resource_group: weblogic_j2eeserver
+        y_axis: jdbc_connections_per_minute
+        unit: ops/min
+        aliases: [weblogic jdbc throughput, ebs jdbc throughput, jdbc connection throughput]
+      weblogic_http_sessions:
+        label: WebLogic open HTTP sessions
+        metric_names: [OpenHTTPSessions]
+        resource_group: weblogic_j2eeserver
+        y_axis: open_http_sessions
+        unit: count
+        aliases: [weblogic http sessions, weblogic open sessions, ebs application sessions]
+      weblogic_request_time:
+        label: WebLogic web request processing time
+        metric_names: [WebRequestProcessingTime]
+        resource_group: weblogic_j2eeserver
+        y_axis: request_processing_time_ms
+        unit: ms
+        aliases: [weblogic request time, weblogic response time, weblogic web request processing time]
+      weblogic_cluster_status:
+        label: WebLogic cluster status
+        metric_names: [MonitoringStatus]
+        resource_group: weblogic_cluster
+        y_axis: monitoring_status
+        unit: status
+        aliases: [weblogic cluster status, weblogic cluster availability]
+
+  oracle_oci_database:
+    display_name: Oracle Database Management
+    resource_type: ManagedDatabase
+    sdk_client: MonitoringClient
+    resource_name_dimension: resourceName
+    group_by_dimensions: [resourceId, resourceName]
+    resource_label: database
+    metrics:
+      managed_db_status:
+        label: Managed database monitoring status
+        metric_names: [MonitoringStatus]
+        y_axis: monitoring_status
+        unit: status
+        aliases: [managed database status, external database status, ebs database status]
+      managed_db_cpu:
+        label: Managed database CPU utilization
+        metric_names: [CpuUtilization]
+        y_axis: cpu_utilization_percent
+        unit: percent
+        aliases: [managed database cpu, external database cpu, ebs database cpu]
+      managed_db_time:
+        label: Managed database DB time
+        metric_names: [DBTime]
+        y_axis: db_time_seconds_per_second
+        unit: seconds/s
+        aliases: [managed database db time, external database db time, ebs database db time]
+      managed_db_wait_time:
+        label: Managed database wait time
+        metric_names: [WaitTime]
+        y_axis: wait_time_seconds_per_second
+        unit: seconds/s
+        aliases: [managed database wait time, external database wait time, ebs database wait time]
+      managed_db_blocking_sessions:
+        label: Managed database blocking sessions
+        metric_names: [BlockingSessions]
+        y_axis: blocking_session_count
+        unit: count
+        aliases: [managed database blocking sessions, external database blocking sessions, ebs database blockers]
+      managed_db_sessions:
+        label: Managed database sessions
+        metric_names: [Sessions]
+        y_axis: database_session_count
+        unit: count
+        aliases: [managed database sessions, external database sessions, ebs database sessions]
+      managed_db_storage:
+        label: Managed database storage utilization
+        metric_names: [StorageUtilization]
+        y_axis: storage_utilization_percent
+        unit: percent
+        aliases: [managed database storage, external database storage, ebs database storage]
+      managed_db_session_limit:
+        label: Managed database session limit utilization
+        metric_names: [SessionLimitUtilization]
+        y_axis: session_limit_utilization_percent
+        unit: percent
+        aliases: [managed database session limit, external database session limit, ebs database session utilization]
+
+  oracle_oci_database_cluster:
+    display_name: Oracle Database System Components
+    resource_type: ExternalDatabaseSystemComponent
+    sdk_client: MonitoringClient
+    resource_name_dimension: resourceName
+    group_by_dimensions: [resourceId, resourceName]
+    resource_label: database system component
+    metrics:
+      db_asm_status:
+        label: Oracle ASM monitoring status
+        metric_names: [MonitoringStatus]
+        resource_group: oracle_asm
+        y_axis: monitoring_status
+        unit: status
+        aliases: [oracle asm status, ebs database asm status, asm monitoring status]
+      db_asm_disk_group_utilization:
+        label: Oracle ASM disk group utilization
+        metric_names: [DiskGroupUtilization]
+        resource_group: oracle_asm
+        y_axis: disk_group_utilization_percent
+        unit: percent
+        aliases: [oracle asm disk group utilization, ebs database asm storage, asm disk group usage]
+      db_asm_io_throughput:
+        label: Oracle ASM I/O throughput
+        metric_names: [IOThroughput]
+        resource_group: oracle_asm
+        y_axis: io_throughput_mb_per_second
+        unit: MB/s
+        aliases: [oracle asm io throughput, ebs database asm throughput, asm throughput]
+      db_cluster_status:
+        label: Oracle database cluster monitoring status
+        metric_names: [MonitoringStatus]
+        resource_group: oracle_cluster
+        y_axis: monitoring_status
+        unit: status
+        aliases: [oracle database cluster status, ebs database cluster status, database cluster monitoring status]
+      db_cluster_interconnect_errors:
+        label: Oracle database cluster interconnect errors
+        metric_names: [ClusterInterconnectErrorRate]
+        resource_group: oracle_cluster
+        y_axis: cluster_interconnect_errors
+        unit: count
+        aliases: [oracle cluster interconnect errors, ebs database cluster errors, cluster interconnect error rate]
+      db_node_cpu:
+        label: Oracle database node CPU utilization
+        metric_names: [CpuUtilization]
+        resource_group: oracle_db_node
+        y_axis: cpu_utilization_percent
+        unit: percent
+        aliases: [oracle database node cpu, ebs database node cpu, database node cpu utilization]
+      db_node_memory:
+        label: Oracle database node memory utilization
+        metric_names: [MemoryUtilization]
+        resource_group: oracle_db_node
+        y_axis: memory_utilization_percent
+        unit: percent
+        aliases: [oracle database node memory, ebs database node memory, database node memory utilization]
+      db_node_storage:
+        label: Oracle database node storage utilization
+        metric_names: [StorageUtilization]
+        resource_group: oracle_db_node
+        y_axis: storage_utilization_percent
+        unit: percent
+        aliases: [oracle database node storage, ebs database node storage, database node storage utilization]
+      db_listener_status:
+        label: Oracle database listener monitoring status
+        metric_names: [MonitoringStatus]
+        resource_group: oracle_lsnr
+        y_axis: monitoring_status
+        unit: status
+        aliases: [oracle database listener status, ebs database listener status, database listener monitoring status]
+      db_listener_active_connections:
+        label: Oracle database listener active connections
+        metric_names: [ActiveConnections]
+        resource_group: oracle_lsnr
+        y_axis: active_connection_count
+        unit: count
+        aliases: [oracle database listener connections, ebs database listener connections, database listener active connections]
+      db_listener_refused_connections:
+        label: Oracle database listener refused connections
+        metric_names: [RefusedConnections]
+        resource_group: oracle_lsnr
+        y_axis: refused_connections_per_minute
+        unit: connections/min
+        aliases: [oracle database listener refused connections, ebs database listener failures, database listener refused connections]

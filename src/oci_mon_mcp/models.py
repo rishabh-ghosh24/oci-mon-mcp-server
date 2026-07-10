@@ -85,6 +85,7 @@ class AssistantDetails:
     scope: dict[str, Any] = field(default_factory=dict)
     interval: str | None = None
     namespace: str | None = None
+    resource_group: str | None = None
     metric: str | None = None
     template_id: str | None = None
     truncated: bool = False
@@ -150,6 +151,12 @@ class ParsedQuery:
     time_range: str
     interval: str
     aggregation: str
+    resource_group: str | None = None
+    resource_name_dimension: str = "resourceDisplayName"
+    group_by_dimensions: list[str] = field(
+        default_factory=lambda: ["resourceId", "resourceDisplayName", "compartmentId"]
+    )
+    resource_label: str = "compute instance"
     threshold: float | None = None
     top_n: int | None = None
     instance_name: str | None = None
@@ -180,7 +187,11 @@ class QueryExecutionRequest:
         metric_queries = []
         for metric_name in self.parsed_query.metric_names:
             if self.parsed_query.instance_name:
-                filter_key = "resourceId" if self.parsed_query.instance_id else "resourceDisplayName"
+                filter_key = (
+                    "resourceId"
+                    if self.parsed_query.instance_id
+                    else self.parsed_query.resource_name_dimension
+                )
                 filter_value = self.parsed_query.instance_id or self.parsed_query.instance_name
                 metric_queries.append(
                     f'{metric_name}[{self.parsed_query.interval}]'
@@ -188,9 +199,10 @@ class QueryExecutionRequest:
                     f".{self.parsed_query.aggregation}()"
                 )
             else:
+                group_by = ",".join(self.parsed_query.group_by_dimensions)
                 metric_queries.append(
                     f"{metric_name}[{self.parsed_query.interval}]"
-                    f".groupBy(resourceId,resourceDisplayName,compartmentId)"
+                    f".groupBy({group_by})"
                     f".{self.parsed_query.aggregation}()"
                 )
         return "\n".join(metric_queries)
